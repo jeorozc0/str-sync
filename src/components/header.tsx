@@ -1,7 +1,13 @@
 "use client";
-
 import React from "react";
-import { BarChart2, Search, Command, User, Settings, LogOut } from "lucide-react";
+import {
+  BarChart2,
+  Search,
+  Command,
+  User as UserIcon,
+  Settings,
+  LogOut,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -12,8 +18,14 @@ import {
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { type User } from "@prisma/client";
 
-export default function Header({ user }) {  // Accept user prop from parent
+// Fix: Change the props type definition
+interface HeaderProps {
+  user: Partial<User> | null;
+}
+
+export default function Header({ user }: HeaderProps) {
   const supabase = createClient();
   const router = useRouter();
 
@@ -22,12 +34,8 @@ export default function Header({ user }) {  // Accept user prop from parent
     router.refresh();
   };
 
-  // Get avatar URL from user metadata if available
-  const avatarUrl = user?.user_metadata?.avatar_url ||
-    user?.identities?.[0]?.identity_data?.avatar_url;
-
   return (
-    <header className="border-b border-[#333333] px-4 py-3 flex items-center justify-between">
+    <header className="flex items-center justify-between border-b border-[#333333] px-4 py-3">
       <div className="flex items-center gap-2">
         <BarChart2 className="h-6 w-6" />
         <h1 className="text-lg font-semibold">StrengthSync</h1>
@@ -38,7 +46,7 @@ export default function Header({ user }) {  // Accept user prop from parent
           <input
             type="search"
             placeholder="Search workouts..."
-            className="bg-[#111111] border border-[#333333] rounded-md pl-9 pr-4 py-2 w-64 focus:outline-none focus:ring-1 focus:ring-white"
+            className="w-64 rounded-md border border-[#333333] bg-[#111111] py-2 pl-9 pr-4 focus:outline-none focus:ring-1 focus:ring-white"
           />
         </div>
         <Button variant="outline" size="icon" className="border-[#333333]">
@@ -47,17 +55,21 @@ export default function Header({ user }) {  // Accept user prop from parent
         </Button>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" size="icon" className="rounded-full border-[#333333] overflow-hidden">
-              {avatarUrl ? (
+            <Button
+              variant="outline"
+              size="icon"
+              className="overflow-hidden rounded-full border-[#333333]"
+            >
+              {user ? (
                 <Image
-                  src={avatarUrl}
+                  src={user.avatarUrl!}
                   alt="User profile"
                   width={32}
                   height={32}
                   className="h-full w-full object-cover"
                 />
               ) : (
-                <User className="h-4 w-4" />
+                <UserIcon className="h-4 w-4" />
               )}
               <span className="sr-only">User menu</span>
             </Button>

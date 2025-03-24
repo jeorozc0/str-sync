@@ -1,26 +1,30 @@
-import Header from '@/components/header'
-import { createClient } from '@/utils/supabase/server'
-import { redirect } from 'next/navigation'
+import Header from "@/components/header";
+import { db } from "@/server/db";
+import { getUserProfile } from "@/server/queries/user";
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
 
 export default async function ProtectedLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   // Authenticate on the server
-  const supabase = await createClient()
+  const supabase = await createClient();
 
-  const { data, error: authError } = await supabase.auth.getUser()
+  const { data, error: authError } = await supabase.auth.getUser();
   if (authError || !data?.user) {
-    redirect('/login')
+    redirect("/login");
   }
 
+  const user = await getUserProfile(data.user.id);
+
   return (
-    <>
-      <Header user={data.user} />
-      <main className="min-h-screen bg-black text-white">
-        {children}
+    <div className="flex h-screen flex-col overflow-hidden">
+      <Header user={user} />
+      <main className="flex-1 overflow-auto bg-black text-white">
+        <div className="h-full">{children}</div>
       </main>
-    </>
-  )
+    </div>
+  );
 }
