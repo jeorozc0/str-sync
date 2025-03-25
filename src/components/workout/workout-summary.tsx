@@ -14,7 +14,7 @@ export default function WorkoutSummary() {
       </div>
 
       <div className="border-t border-[#333333] pt-4">
-        <Button className="w-full bg-[#0070F3] font-medium text-white hover:bg-[#0060DF]">
+        <Button className="h-9 w-full gap-2 bg-white text-black hover:bg-gray-200">
           Save Workout
         </Button>
       </div>

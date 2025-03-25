@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,40 +23,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { type WorkoutExercise } from "@/stores/workout-store";
-
-// Mock exercise database - replace with your actual database
-const exerciseDatabase = [
-  {
-    id: "ex1",
-    name: "Bench Press",
-    category: "Chest",
-    equipment: "Barbell",
-  },
-  {
-    id: "ex2",
-    name: "Pull-up",
-    category: "Back",
-    equipment: "Bodyweight",
-  },
-  {
-    id: "ex3",
-    name: "Squat",
-    category: "Legs",
-    equipment: "Barbell",
-  },
-  {
-    id: "ex4",
-    name: "Shoulder Press",
-    category: "Shoulders",
-    equipment: "Dumbbell",
-  },
-  {
-    id: "ex5",
-    name: "Deadlift",
-    category: "Back",
-    equipment: "Barbell",
-  },
-];
+import { getAllExercises } from "@/actions/exercises";
+import { filterExercises } from "@/utils/filter-exercises";
+import { type Exercise } from "@prisma/client";
 
 // Initial state for a new exercise
 const initialExerciseState: WorkoutExercise = {
@@ -84,40 +53,58 @@ interface ExerciseDialogProps {
   isEditing: boolean;
 }
 
-const ExerciseDialog: React.FC<ExerciseDialogProps> = ({
+export default function ExerciseDialog({
   open,
   onClose,
   onSave,
   exercise,
   isEditing,
-}) => {
+}: ExerciseDialogProps) {
   const [currentExercise, setCurrentExercise] = useState<WorkoutExercise>(
     exercise ?? initialExerciseState,
   );
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
+  const [exercises, setExercises] = useState<Exercise[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch exercises when component mounts
+  useEffect(() => {
+    const fetchExercises = async () => {
+      try {
+        setIsLoading(true);
+        const { exercises: fetchedExercises, error } = await getAllExercises();
+        if (error) {
+          setError(error);
+        } else {
+          setExercises(fetchedExercises || []);
+        }
+      } catch (err) {
+        setError("Failed to load exercises");
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Use void operator to explicitly mark the Promise as intentionally ignored
+    void fetchExercises();
+  }, []);
 
   // Filter exercises based on search query
-  const filteredExercises = exerciseDatabase.filter(
-    (exercise) =>
-      exercise.name.toLowerCase().includes(exerciseSearchQuery.toLowerCase()) ||
-      exercise.category
-        .toLowerCase()
-        .includes(exerciseSearchQuery.toLowerCase()) ||
-      exercise.equipment
-        .toLowerCase()
-        .includes(exerciseSearchQuery.toLowerCase()),
-  );
+  const filteredExercises = filterExercises(exercises, exerciseSearchQuery);
+  console.log(exercises);
 
   // Handle selecting an exercise from the database
-  const handleSelectExercise = (dbExercise: (typeof exerciseDatabase)[0]) => {
+  const handleSelectExercise = (dbExercise: Exercise) => {
     setCurrentExercise({
       ...currentExercise,
       exerciseId: dbExercise.id,
       exercise: {
         id: dbExercise.id,
         name: dbExercise.name,
-        muscleGroup: dbExercise.category,
-        equipment: dbExercise.equipment,
+        muscleGroup: dbExercise.muscleGroup,
+        equipment: dbExercise.equipment ?? undefined,
       },
     });
   };
@@ -158,7 +145,13 @@ const ExerciseDialog: React.FC<ExerciseDialogProps> = ({
               </div>
 
               <ScrollArea className="h-[200px] rounded-md border border-[#333333] p-2">
-                {filteredExercises.length > 0 ? (
+                {isLoading ? (
+                  <div className="py-8 text-center text-gray-400">
+                    Loading exercises...
+                  </div>
+                ) : error ? (
+                  <div className="py-8 text-center text-gray-400">{error}</div>
+                ) : filteredExercises.length > 0 ? (
                   <div className="space-y-2">
                     {filteredExercises.map((dbExercise) => (
                       <div
@@ -172,7 +165,6 @@ const ExerciseDialog: React.FC<ExerciseDialogProps> = ({
                       >
                         <div className="font-medium">{dbExercise.name}</div>
                         <div className="mt-1 flex gap-2 text-xs text-gray-400">
-                          <span>{dbExercise.category}</span>
                           {dbExercise.equipment && (
                             <>
                               <span>•</span>
@@ -373,6 +365,4 @@ const ExerciseDialog: React.FC<ExerciseDialogProps> = ({
       </DialogContent>
     </Dialog>
   );
-};
-
-export default ExerciseDialog;
+}

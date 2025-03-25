@@ -1,26 +1,34 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Plus, FolderPlus, Sparkles, ChevronDown } from "lucide-react"
-import { CreateFolderDialog } from "./create-folder-dialogue"
-import { createFolder } from "@/lib/actions/folders"
-import { useRouter } from "next/navigation"
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Plus, FolderPlus, Sparkles, ChevronDown } from "lucide-react";
+import { CreateFolderDialog } from "./create-folder-dialogue";
+import { useRouter } from "next/navigation";
+import { createFolder } from "@/actions/folders";
 
 interface AddFolderButtonProps {
-  userId: string
+  userId: string;
 }
 
 export function AddFolderButton({ userId }: AddFolderButtonProps) {
-  const router = useRouter()
-  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
-  console.log(userId)
-  const handleFolderCreate = async (folderName: string, description?: string) => {
+  const router = useRouter();
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  console.log(userId);
+  const handleFolderCreate = async (
+    folderName: string,
+    description?: string,
+  ) => {
     const result = await createFolder({
       name: folderName,
       description,
-      userId: userId
+      userId: userId,
     });
 
     if (result.success) {
@@ -38,25 +46,28 @@ export function AddFolderButton({ userId }: AddFolderButtonProps) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <Button className="bg-white text-black hover:bg-gray-200 gap-2 h-9">
-            Add New... <ChevronDown className="h-4 w-4 ml-1" />
+          <Button className="h-9 gap-2 bg-white text-black hover:bg-gray-200">
+            Add New... <ChevronDown className="ml-1 h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="bg-[#111111] border-[#333333] text-white">
+        <DropdownMenuContent
+          align="end"
+          className="border-[#333333] bg-[#111111] text-white"
+        >
           <DropdownMenuItem onSelect={() => setFolderDialogOpen(true)}>
-            <FolderPlus className="h-4 w-4 mr-2" />
+            <FolderPlus className="mr-2 h-4 w-4" />
             Folder
           </DropdownMenuItem>
           <DropdownMenuItem onSelect={() => router.push(`/w/create`)}>
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Workout
           </DropdownMenuItem>
           <DropdownMenuItem>
-            <Sparkles className="h-4 w-4 mr-2" />
+            <Sparkles className="mr-2 h-4 w-4" />
             AI Workout
           </DropdownMenuItem>
         </DropdownMenuContent>
-      </DropdownMenu >
+      </DropdownMenu>
 
       <CreateFolderDialog
         open={folderDialogOpen}
@@ -64,5 +75,5 @@ export function AddFolderButton({ userId }: AddFolderButtonProps) {
         onFolderCreate={handleFolderCreate}
       />
     </>
-  )
+  );
 }

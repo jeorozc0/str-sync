@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import useWorkoutStore, { type WorkoutExercise } from "@/stores/workout-store";
 import ExerciseDialog from "./workout-add-dialogue";
 
-const WorkoutExerciseList = () => {
+export default function WorkoutExerciseList() {
   const { currentWorkout, addExercise, updateExercise, removeExercise } =
     useWorkoutStore();
   const [showExerciseDialog, setShowExerciseDialog] = useState(false);
@@ -97,13 +97,6 @@ const WorkoutExerciseList = () => {
               Add exercises to build your workout routine. You can specify sets,
               reps, intensity, and rest time for each exercise.
             </p>
-            <Button
-              onClick={handleAddExercise}
-              className="gap-2 bg-white text-black hover:bg-gray-200"
-            >
-              <Plus className="h-4 w-4" />
-              Add Exercise
-            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -210,6 +203,4 @@ const WorkoutExerciseList = () => {
       )}
     </div>
   );
-};
-
-export default WorkoutExerciseList;
+}

@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect } from "react";
+import React from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -21,10 +21,10 @@ interface WorkoutDetailsFormProps {
 // Special value to represent "no folder" selection
 const NO_FOLDER_VALUE = "no-folder";
 
-const WorkoutDetailsForm: React.FC<WorkoutDetailsFormProps> = ({
+export default function WorkoutDetailsForm({
   folders = [],
   folderId,
-}) => {
+}: WorkoutDetailsFormProps) {
   const router = useRouter();
 
   const {
@@ -32,17 +32,9 @@ const WorkoutDetailsForm: React.FC<WorkoutDetailsFormProps> = ({
     setName,
     setDescription,
     setFolderId,
-    initWithFolder,
     saveWorkout,
     error,
   } = useWorkoutStore();
-
-  // Initialize with folder from URL if present
-  useEffect(() => {
-    if (folderId) {
-      initWithFolder(folderId);
-    }
-  }, [folderId, initWithFolder]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -55,9 +47,7 @@ const WorkoutDetailsForm: React.FC<WorkoutDetailsFormProps> = ({
 
   // Helper function to convert between null and NO_FOLDER_VALUE
   const getSelectValue = () => {
-    return currentWorkout.folderId === null
-      ? NO_FOLDER_VALUE
-      : currentWorkout.folderId || NO_FOLDER_VALUE;
+    return folderId === null ? NO_FOLDER_VALUE : (folderId ?? NO_FOLDER_VALUE);
   };
 
   // Handle select value change with special case for "no folder"
@@ -117,6 +107,4 @@ const WorkoutDetailsForm: React.FC<WorkoutDetailsFormProps> = ({
       </Card>
     </form>
   );
-};
-
-export default WorkoutDetailsForm;
+}
