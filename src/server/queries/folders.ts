@@ -1,6 +1,6 @@
-import { type Folder } from '@prisma/client';
-import { db } from '../db';
-import { nanoid } from "nanoid"
+import { type Folder } from "@prisma/client";
+import { db } from "../db";
+import { nanoid } from "nanoid";
 
 // Return type for getUserFolders
 type GetUserFoldersResult = {
@@ -14,31 +14,35 @@ type GetUserFoldersResult = {
 
 // Return type for getFolderById
 type GetFolderByIdResult = {
-  folder: (Folder & {
-    workouts: {
-      id: string;
-      name: string;
-      description: string | null;
-      isArchived: boolean;
-      updatedAt: Date;
-      _count: {
-        exercises: number;
-      };
-    }[];
-  }) | null;
+  folder:
+    | (Folder & {
+        workouts: {
+          id: string;
+          name: string;
+          description: string | null;
+          isArchived: boolean;
+          updatedAt: Date;
+          _count: {
+            exercises: number;
+          };
+        }[];
+      })
+    | null;
   error?: string;
 };
 
 /**
  * Fetch all folders for a specific user
- * 
+ *
  * @param userId - The UUID of the user
  * @returns A Promise that resolves to an array of folders and any potential error
  */
-export async function getUserFolders(userId: string): Promise<GetUserFoldersResult> {
+export async function getUserFolders(
+  userId: string,
+): Promise<GetUserFoldersResult> {
   try {
     if (!userId) {
-      throw new Error('User ID is required');
+      throw new Error("User ID is required");
     }
 
     const folders = await db.folder.findMany({
@@ -46,7 +50,7 @@ export async function getUserFolders(userId: string): Promise<GetUserFoldersResu
         userId: userId, // Use the model field name "userId"
       },
       orderBy: {
-        updatedAt: 'desc',
+        updatedAt: "desc",
       },
       select: {
         id: true,
@@ -65,22 +69,25 @@ export async function getUserFolders(userId: string): Promise<GetUserFoldersResu
 
     return { folders };
   } catch (error) {
-    console.error('Failed to fetch user folders:', error);
-    return { folders: [], error: 'Failed to fetch folders' };
+    console.error("Failed to fetch user folders:", error);
+    return { folders: [], error: "Failed to fetch folders" };
   }
 }
 
 /**
  * Fetch a single folder by ID, ensuring it belongs to the specified user
- * 
+ *
  * @param folderId - The UUID of the folder
  * @param userId - The UUID of the user
  * @returns A Promise that resolves to the folder with its workouts or null with an error
  */
-export async function getFolderById(folderId: string, userId: string): Promise<GetFolderByIdResult> {
+export async function getFolderById(
+  folderId: string,
+  userId: string,
+): Promise<GetFolderByIdResult> {
   try {
     if (!folderId || !userId) {
-      throw new Error('Folder ID and User ID are required');
+      throw new Error("Folder ID and User ID are required");
     }
 
     const folder = await db.folder.findFirst({
@@ -112,26 +119,26 @@ export async function getFolderById(folderId: string, userId: string): Promise<G
             isArchived: false,
           },
           orderBy: {
-            updatedAt: 'desc',
+            updatedAt: "desc",
           },
         },
       },
     });
 
     if (!folder) {
-      return { folder: null, error: 'Folder not found' };
+      return { folder: null, error: "Folder not found" };
     }
 
     return { folder };
   } catch (error) {
-    console.error('Failed to fetch folder:', error);
-    return { folder: null, error: 'Failed to fetch folder' };
+    console.error("Failed to fetch folder:", error);
+    return { folder: null, error: "Failed to fetch folder" };
   }
 }
 
 /**
  * Create a new folder for a user
- * 
+ *
  * @param data - Object containing folder data
  * @returns A Promise that resolves to the created folder or null with an error
  */
@@ -143,7 +150,7 @@ export async function createFolderQuery(data: {
   try {
     const { name, description, userId } = data;
     if (!name || !userId) {
-      throw new Error('Folder name and User ID are required');
+      throw new Error("Folder name and User ID are required");
     }
 
     const folder = await db.folder.create({
@@ -157,15 +164,14 @@ export async function createFolderQuery(data: {
 
     return { folder };
   } catch (error) {
-    console.error('Failed to create folder:', error);
-    return { folder: null, error: 'Failed to create folder' };
+    console.error("Failed to create folder:", error);
+    return { folder: null, error: "Failed to create folder" };
   }
 }
 
-
 /**
  * Update an existing folder
- * 
+ *
  * @param folderId - The UUID of the folder to update
  * @param userId - The UUID of the user who owns the folder
  * @param data - Object containing folder data to update
@@ -174,23 +180,26 @@ export async function createFolderQuery(data: {
 export async function updateFolder(
   folderId: string,
   userId: string,
-  data: { name?: string; description?: string | null }
+  data: { name?: string; description?: string | null },
 ): Promise<{ folder: Folder | null; error?: string }> {
   try {
     if (!folderId || !userId) {
-      throw new Error('Folder ID and User ID are required');
+      throw new Error("Folder ID and User ID are required");
     }
 
     // First check if the folder exists and belongs to the user
     const existingFolder = await db.folder.findFirst({
       where: {
         id: folderId,
-        user_id: userId,
+        userId: userId,
       },
     });
 
     if (!existingFolder) {
-      return { folder: null, error: 'Folder not found or you do not have permission to update it' };
+      return {
+        folder: null,
+        error: "Folder not found or you do not have permission to update it",
+      };
     }
 
     // Update the folder
@@ -200,43 +209,48 @@ export async function updateFolder(
       },
       data: {
         ...(data.name && { name: data.name.trim() }),
-        ...(data.description !== undefined && { description: data.description?.trim() || null }),
+        ...(data.description !== undefined && {
+          description: data.description?.trim() ?? null,
+        }),
       },
     });
 
     return { folder };
   } catch (error) {
-    console.error('Failed to update folder:', error);
-    return { folder: null, error: 'Failed to update folder' };
+    console.error("Failed to update folder:", error);
+    return { folder: null, error: "Failed to update folder" };
   }
 }
 
 /**
  * Delete a folder
- * 
+ *
  * @param folderId - The UUID of the folder to delete
  * @param userId - The UUID of the user who owns the folder
  * @returns A Promise that resolves to success or error
  */
 export async function deleteFolder(
   folderId: string,
-  userId: string
+  userId: string,
 ): Promise<{ success: boolean; error?: string }> {
   try {
     if (!folderId || !userId) {
-      throw new Error('Folder ID and User ID are required');
+      throw new Error("Folder ID and User ID are required");
     }
 
     // First check if the folder exists and belongs to the user
     const existingFolder = await db.folder.findFirst({
       where: {
         id: folderId,
-        user_id: userId,
+        userId: userId,
       },
     });
 
     if (!existingFolder) {
-      return { success: false, error: 'Folder not found or you do not have permission to delete it' };
+      return {
+        success: false,
+        error: "Folder not found or you do not have permission to delete it",
+      };
     }
 
     // Delete the folder
@@ -248,8 +262,8 @@ export async function deleteFolder(
 
     return { success: true };
   } catch (error) {
-    console.error('Failed to delete folder:', error);
-    return { success: false, error: 'Failed to delete folder' };
+    console.error("Failed to delete folder:", error);
+    return { success: false, error: "Failed to delete folder" };
   }
 }
 
@@ -258,16 +272,16 @@ export async function getFoldersName() {
     const folders = await db.folder.findMany({
       select: {
         id: true,
-        name: true
+        name: true,
       },
       orderBy: {
-        name: 'asc'
-      }
+        name: "asc",
+      },
     });
 
     return folders;
   } catch (error) {
-    console.error('Error fetching folders:', error);
+    console.error("Error fetching folders:", error);
     return [];
   }
 }

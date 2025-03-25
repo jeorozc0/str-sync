@@ -1,6 +1,16 @@
-import { db } from '../db';
+import { db } from "../db";
 
-// Get all exercises
+/**
+ * Fetches all exercises from the database
+ *
+ * @returns Promise that resolves to an array of Exercise objects
+ * @example
+ * // Get all exercises
+ * const exercises = await fetchAllExercises();
+ * console.log(`Found ${exercises.length} exercises`);
+ */
 export default async function fetchAllExercises() {
-  return await db.exercise.findMany()
+  const exercises = await db.exercise.findMany();
+  console.log(exercises);
+  return exercises;
 }
