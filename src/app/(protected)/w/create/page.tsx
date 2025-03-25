@@ -16,6 +16,7 @@ export default async function CreateWorkoutPage({
 }) {
   // Fetch folders on the server
   const folderId = searchParams.folder;
+  console.log(folderId);
   const folders = await getFoldersName();
 
   return (

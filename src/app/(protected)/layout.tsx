@@ -1,5 +1,4 @@
 import Header from "@/components/header";
-import { db } from "@/server/db";
 import { getUserProfile } from "@/server/queries/user";
 import { createClient } from "@/utils/supabase/server";
 import { redirect } from "next/navigation";
