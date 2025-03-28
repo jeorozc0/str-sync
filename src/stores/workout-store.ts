@@ -1,84 +1,8 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
+import { type WorkoutFormState, type WorkoutStore } from "@/types/store";
+import { createWorkoutAction } from "@/actions/workouts";
 
-export interface Folder {
-  id: string;
-  name: string;
-}
-
-export interface Exercise {
-  id: string;
-  name: string;
-  muscleGroup: string;
-  secondaryMuscleGroups?: string;
-  description?: string;
-  instructions?: string;
-  difficulty?: string;
-  equipment?: string;
-}
-
-export interface WorkoutExercise {
-  id: string;
-  order: number;
-  sets: number;
-  reps: string;
-  weight?: number;
-  restSeconds?: number;
-  rir?: 0 | 1 | 2 | 3 | 4 | 5; // Reps in Reserve (intensity)
-  notes?: string;
-  exerciseId: string;
-  exercise: Exercise;
-}
-
-export interface Workout {
-  id: string;
-  createdAt: Date;
-  updatedAt: Date;
-  name: string;
-  description: string | null;
-  isArchived: boolean;
-  userId: string;
-  folderId: string | null;
-  exercises: WorkoutExercise[];
-}
-
-// Form state for workout creation
-interface WorkoutFormState {
-  name: string;
-  description: string | null;
-  folderId: string | null;
-  exercises: WorkoutExercise[];
-}
-
-interface WorkoutStore {
-  // Workout data
-  currentWorkout: WorkoutFormState;
-  isSubmitting: boolean;
-  error: string | null;
-
-  // Form actions
-  setName: (name: string) => void;
-  setDescription: (description: string | null) => void;
-  setFolderId: (folderId: string | null) => void;
-
-  // Exercise actions
-  addExercise: (exercise: WorkoutExercise) => void;
-  updateExercise: (index: number, exercise: WorkoutExercise) => void;
-  removeExercise: (index: number) => void;
-  reorderExercises: (exercises: WorkoutExercise[]) => void;
-
-  // Init with predefined folder
-  initWithFolder: (folderId: string | null) => void;
-
-  // Reset form
-  resetForm: () => void;
-
-  // Submit actions
-  saveWorkout: () => Promise<string | null>; // Returns workout ID if successful
-
-  // Server sync mock (in real app, this would call your API)
-  fetchCurrentWorkout: (id: string) => Promise<void>;
-}
 
 // Initial state for the form
 const initialFormState: WorkoutFormState = {
@@ -87,6 +11,9 @@ const initialFormState: WorkoutFormState = {
   folderId: null,
   exercises: [],
 };
+
+
+// Get the user's ID from the auth data
 
 const useWorkoutStore = create<WorkoutStore>((set, get) => ({
   // Initial state
@@ -202,6 +129,7 @@ const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     }),
 
   // Save workout to server
+  // In your store file
   saveWorkout: async () => {
     set({ isSubmitting: true, error: null });
     const { currentWorkout } = get();
@@ -216,12 +144,17 @@ const useWorkoutStore = create<WorkoutStore>((set, get) => ({
     }
 
     try {
-      // In a real app, you'd make an API call here
-      // Simulate API call delay
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Call server action
+      const result = await createWorkoutAction(currentWorkout);
 
-      // Mock successful response with new workout ID
-      const newWorkoutId = nanoid(10);
+      if (!result.success) {
+        throw new Error(result.error);
+      }
+
+      // Make sure workoutId exists
+      if (!result.workoutId) {
+        throw new Error("Workout ID not returned from server");
+      }
 
       // Reset form after successful submission
       set({
@@ -229,7 +162,8 @@ const useWorkoutStore = create<WorkoutStore>((set, get) => ({
         currentWorkout: { ...initialFormState },
       });
 
-      return newWorkoutId;
+      // Return the ID which we've confirmed exists
+      return result.workoutId;
     } catch (error) {
       set({
         isSubmitting: false,

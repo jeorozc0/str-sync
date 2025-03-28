@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { ArrowLeft, BarChart2, Search, Target, Flame, Plus, Dumbbell } from 'lucide-react';
+import { ArrowLeft, Target, Flame, Plus, Dumbbell } from 'lucide-react';
 import { Inter } from 'next/font/google';
 import { getFolderById } from '@/server/queries/folders';
 import WorkoutCards from '@/components/workout-card';
@@ -32,23 +32,12 @@ export default async function FolderPage({ params }: FolderPageProps) {
   if (error || !folder) {
     return (
       <div className="min-h-screen bg-black text-white">
-        Error: {error || "Folder not found"}
+        Error: {error ?? "Folder not found"}
       </div>
     );
   }
 
   // Helper functions for stats
-  function calculateTotalWeight(workouts: any[]) {
-    return workouts.reduce((total, workout) => total + (workout.totalWeight || 0), 0);
-  }
-  function calculateAvgDuration(workouts: any[]) {
-    if (workouts.length === 0) return "0 min";
-    const totalMinutes = workouts.reduce((total, workout) => {
-      const minutes = Number.parseInt(workout.duration.split(" ")[0]);
-      return total + minutes;
-    }, 0);
-    return `${Math.round(totalMinutes / workouts.length)} min`;
-  }
 
   return (
     <div className={`min-h-screen bg-black text-white ${inter.className}`}>
@@ -106,15 +95,11 @@ export default async function FolderPage({ params }: FolderPageProps) {
                 <div>
                   <div className="flex justify-between items-center mb-2">
                     <h3 className="text-sm font-medium">Total Weight Lifted</h3>
-                    <span className="text-lg font-semibold">
-                      {calculateTotalWeight(folder.workouts)} lbs
-                    </span>
+
                   </div>
                   <div className="flex justify-between items-center mb-2">
                     <h3 className="text-sm font-medium">Avg. Workout Duration</h3>
-                    <span className="text-lg font-semibold">
-                      {calculateAvgDuration(folder.workouts)}
-                    </span>
+
                   </div>
                   <div className="flex justify-between items-center">
                     <h3 className="text-sm font-medium">Workouts Completed</h3>

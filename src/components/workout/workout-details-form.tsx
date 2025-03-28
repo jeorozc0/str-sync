@@ -1,5 +1,5 @@
 "use client";
-import React from "react";
+import React, { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,6 @@ export default function WorkoutDetailsForm({
   folderId,
 }: WorkoutDetailsFormProps) {
   const router = useRouter();
-
   const {
     currentWorkout,
     setName,
@@ -35,6 +34,16 @@ export default function WorkoutDetailsForm({
     saveWorkout,
     error,
   } = useWorkoutStore();
+
+  // Set the folder ID on mount if provided
+  useEffect(() => {
+    if (folderId) {
+      // Small delay to ensure this happens after any default initializations
+      setTimeout(() => {
+        setFolderId(folderId);
+      }, 0);
+    }
+  }, [folderId, setFolderId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,9 +54,17 @@ export default function WorkoutDetailsForm({
     }
   };
 
-  // Helper function to convert between null and NO_FOLDER_VALUE
+  // Helper function to get the current folder value from the store
   const getSelectValue = () => {
-    return folderId === null ? NO_FOLDER_VALUE : (folderId ?? NO_FOLDER_VALUE);
+    // Prioritize the URL parameter if it exists
+    if (folderId && (currentWorkout.folderId === null || currentWorkout.folderId === "")) {
+      return folderId;
+    }
+
+    // Otherwise use the store value
+    return currentWorkout.folderId === null
+      ? NO_FOLDER_VALUE
+      : (currentWorkout.folderId || NO_FOLDER_VALUE);
   };
 
   // Handle select value change with special case for "no folder"
@@ -74,6 +91,7 @@ export default function WorkoutDetailsForm({
             <div className="grid gap-2">
               <Label htmlFor="folder">Save to Folder</Label>
               <Select
+                defaultValue={folderId ?? NO_FOLDER_VALUE}
                 value={getSelectValue()}
                 onValueChange={handleFolderChange}
               >

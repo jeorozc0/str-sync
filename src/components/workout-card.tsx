@@ -37,8 +37,6 @@ interface Workout {
   isArchived: boolean;
   updatedAt: string;
   date: string;
-  duration: string;
-  totalWeight: number;
   _count: { exercises: number };
   exercises?: Array<{
     name: string;
@@ -79,9 +77,6 @@ export default function WorkoutCards({ workouts }: WorkoutCardsProps) {
                   <div className="flex items-center gap-2 mb-1">
                     <h3 className="font-medium">{workout.name}</h3>
                   </div>
-                  <div className="text-sm text-gray-400 mb-3">
-                    {workout._count?.exercises || 0} exercises • {workout.totalWeight} lbs total
-                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     {workout.exercises?.slice(0, 4).map((exercise, index) => (
@@ -104,10 +99,6 @@ export default function WorkoutCards({ workouts }: WorkoutCardsProps) {
                     <div className="flex items-center gap-1">
                       <Calendar className="h-3.5 w-3.5" />
                       <span>{workout.date}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" />
-                      <span>{workout.duration}</span>
                     </div>
                   </div>
                 </div>

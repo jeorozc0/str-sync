@@ -15,19 +15,19 @@ type GetUserFoldersResult = {
 // Return type for getFolderById
 type GetFolderByIdResult = {
   folder:
-    | (Folder & {
-        workouts: {
-          id: string;
-          name: string;
-          description: string | null;
-          isArchived: boolean;
-          updatedAt: Date;
-          _count: {
-            exercises: number;
-          };
-        }[];
-      })
-    | null;
+  | (Folder & {
+    workouts: {
+      id: string;
+      name: string;
+      description: string | null;
+      isArchived: boolean;
+      updatedAt: Date;
+      _count: {
+        exercises: number;
+      };
+    }[];
+  })
+  | null;
   error?: string;
 };
 
@@ -67,6 +67,7 @@ export async function getUserFolders(
       },
     });
 
+    console.log(folders)
     return { folders };
   } catch (error) {
     console.error("Failed to fetch user folders:", error);
