@@ -1,7 +1,9 @@
 import { create } from "zustand";
 import { nanoid } from "nanoid";
-import { type WorkoutFormState, type WorkoutStore } from "@/types/store";
-import { createWorkoutAction } from "@/actions/workouts";
+import { type StoreWorkoutExercise, type WorkoutFormState, type WorkoutStore } from "@/types/store";
+import { createWorkoutAction, updateWorkoutAction } from "@/actions/workouts";
+import { type PlannedExercise, type WorkoutTemplate } from "@/types/workout";
+import { toast } from "sonner";
 
 
 // Initial state for the form
@@ -130,49 +132,62 @@ const useWorkoutStore = create<WorkoutStore>((set, get) => ({
 
   // Save workout to server
   // In your store file
-  saveWorkout: async () => {
+  saveWorkout: async (templateId?: string) => { // Add optional templateId for updates
     set({ isSubmitting: true, error: null });
     const { currentWorkout } = get();
 
-    // Validate required fields
-    if (!currentWorkout.name) {
-      set({
-        isSubmitting: false,
-        error: "Workout name is required",
-      });
+    if (!currentWorkout.name.trim()) {
+      const errorMsg = "Workout name is required";
+      set({ isSubmitting: false, error: errorMsg });
+      toast.error(errorMsg);
+      return null;
+    }
+    if (currentWorkout.exercises.length === 0) {
+      const errorMsg = "Add at least one exercise to the workout";
+      set({ isSubmitting: false, error: errorMsg });
+      toast.error(errorMsg);
       return null;
     }
 
     try {
-      // Call server action
-      const result = await createWorkoutAction(currentWorkout);
+      let result;
+      let successMessage: string;
+
+      if (templateId) {
+        // ----- UPDATE -----
+        console.log("Calling updateWorkoutAction for ID:", templateId);
+        result = await updateWorkoutAction(templateId, currentWorkout);
+        successMessage = "Workout template updated successfully!";
+      } else {
+        // ----- CREATE -----
+        console.log("Calling createWorkoutAction");
+        result = await createWorkoutAction(currentWorkout);
+        successMessage = "Workout template created successfully!";
+      }
 
       if (!result.success) {
-        throw new Error(result.error);
+        throw new Error(result.error ?? "An unknown error occurred");
       }
 
-      // Make sure workoutId exists
-      if (!result.workoutId) {
-        throw new Error("Workout ID not returned from server");
+      set({ isSubmitting: false, error: null });
+      toast.success(successMessage);
+
+      // Reset form only on create, not necessarily on update
+      if (!templateId) {
+        get().resetForm();
       }
 
-      // Reset form after successful submission
-      set({
-        isSubmitting: false,
-        currentWorkout: { ...initialFormState },
-      });
+      return result.workoutId; // Return ID (same for create/update result structure)
 
-      // Return the ID which we've confirmed exists
-      return result.workoutId;
     } catch (error) {
-      set({
-        isSubmitting: false,
-        error:
-          error instanceof Error ? error.message : "Failed to save workout",
-      });
+      const errorMsg = error instanceof Error ? error.message : "Failed to save workout template";
+      set({ isSubmitting: false, error: errorMsg });
+      toast.error(errorMsg);
+      console.error("Save workout error:", error);
       return null;
     }
   },
+
 
   // Fetch an existing workout (for editing)
   fetchCurrentWorkout: async (_id: string) => {
@@ -203,6 +218,38 @@ const useWorkoutStore = create<WorkoutStore>((set, get) => ({
       });
     }
   },
+  initializeForEdit: (template: WorkoutTemplate) => {
+    console.log("Initializing store for edit:", template);
+    // Map fetched WorkoutTemplate data to the WorkoutFormState structure
+    const formState: WorkoutFormState = {
+      name: template.name,
+      description: template.description ?? null,
+      folderId: template.folderId ?? null,
+      exercises: template.plannedExercises.map((pe: PlannedExercise, index: number): StoreWorkoutExercise => ({
+        // Map PlannedExercise to StoreWorkoutExercise
+        id: pe.id, // Use the existing ID from WorkoutExercise record
+        order: index, // Ensure order is sequential based on fetch result
+        sets: pe.targetSets,
+        reps: pe.targetReps,
+        weight: pe.targetWeight,
+        restSeconds: pe.targetRestTime,
+        rir: pe.targetRir, // Add if targetRir exists in PlannedExercise type
+        notes: pe.notes,
+        exerciseId: pe.exerciseId,
+        // Map nested exercise details
+        exercise: {
+          id: pe.exerciseId,
+          name: pe.name,
+          muscleGroup: pe.category ?? 'Unknown', // Use category as muscleGroup
+          equipment: pe.equipment,
+          // Add other fields from Exercise if needed by the store type
+        },
+      })),
+    };
+    set({ currentWorkout: formState, error: null, isSubmitting: false });
+  },
+
+  // --- UPDATED: saveWorkout (now handles both create and update logic via actions) ---
 }));
 
 export default useWorkoutStore;
