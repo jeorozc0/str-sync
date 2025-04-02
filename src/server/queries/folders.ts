@@ -268,9 +268,13 @@ export async function deleteFolder(
   }
 }
 
-export async function getFoldersName() {
+export async function getFoldersName(userId: string,
+) {
   try {
     const folders = await db.folder.findMany({
+      where: {
+        userId: userId, // Use the model field name "userId"
+      },
       select: {
         id: true,
         name: true,
