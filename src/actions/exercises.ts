@@ -2,34 +2,30 @@
 
 import { db } from "@/server/db";
 import fetchAllExercises from "@/server/queries/exercises";
+import { type Exercise } from "@prisma/client";
 
 /**
- * Server action to fetch all exercises
+ * Server action to fetch all exercises (utilizing server-side caching).
  *
- * This function can be directly imported and used in client components
+ * This function can be directly imported and used in client components.
  *
- * @returns Promise that resolves to an array of Exercise objects
- * @example
- * // In a client component:
- * import { getAllExercises } from '@/app/actions/exercises';
- *
- * // Later in component:
- * const handleClick = async () => {
- *   const exercises = await getAllExercises();
- *   console.log(exercises);
- * };
+ * @returns Promise resolving to an object with exercises array or error string.
  */
-export async function getAllExercises() {
+export async function getAllExercises(): Promise<{ exercises: Exercise[] | null; error: string | null; }> {
   try {
+    // This now calls the cached version from the query file
+    const exercises = await fetchAllExercises();
+    console.log(`getAllExercises action called, returning ${exercises?.length ?? 0} exercises (potentially cached).`);
     return {
-      exercises: await fetchAllExercises(),
+      exercises: exercises,
       error: null,
     };
   } catch (error) {
-    console.error("Failed to fetch exercises:", error);
+    console.error("Failed to fetch exercises via action:", error);
+    const message = error instanceof Error ? error.message : "Failed to load exercises. Please try again.";
     return {
-      exercises: [],
-      error: "Failed to load exercises. Please try again.",
+      exercises: null, // Return null on error
+      error: message,
     };
   }
 }
