@@ -1,27 +1,28 @@
-"use client"
+"use client";
 
 import useWorkoutStore from "@/stores/workout-store";
-import { Button } from "../ui/button";
-import { useRouter } from "next/navigation"; // Assuming you're using Next.js
+import { type StoreWorkoutExercise } from "@/types/store"; // Import the specific type
+
+// Helper function (improved type)
+function calculateWorkoutDuration(exercises: StoreWorkoutExercise[] | undefined) { // Use specific type
+  if (!exercises || exercises.length === 0) return null; // Check length directly
+  let totalMinutes = 0;
+  for (const exercise of exercises) {
+    const restTime = exercise.restSeconds ? exercise.restSeconds / 60 : 1;
+    const timePerSet = 1 + restTime;
+    // Use nullish coalescing for potentially undefined sets
+    totalMinutes += (exercise.sets ?? 0) * timePerSet;
+  }
+  totalMinutes += exercises.length * 0.5; // Buffer
+  return Math.round(totalMinutes);
+}
 
 export default function WorkoutSummary() {
-  const { saveWorkout, isSubmitting, currentWorkout } = useWorkoutStore();
-  const router = useRouter();
-  console.log(currentWorkout)
+  // Select only the exercises array
+  const exercises = useWorkoutStore((state) => state.currentWorkout.exercises);
 
-  const exerciseCount = currentWorkout.exercises.length;
-
-  // Calculate estimated duration based on sets, reps and rest times
-  const estimatedDuration = calculateWorkoutDuration(currentWorkout.exercises);
-
-  const handleSaveWorkout = async () => {
-    const workoutId = await saveWorkout();
-
-    if (workoutId) {
-      // Redirect to the workout page or show success message
-      router.push(`/dashboard`);
-    }
-  };
+  const exerciseCount = exercises.length;
+  const estimatedDuration = calculateWorkoutDuration(exercises);
 
   return (
     <div className="space-y-4">
@@ -34,39 +35,9 @@ export default function WorkoutSummary() {
       <div>
         <h3 className="text-sm text-gray-400">Estimated Duration</h3>
         <p className="text-lg font-medium">
-          {estimatedDuration ? `${estimatedDuration} min` : '--'}
+          {estimatedDuration ? `~${estimatedDuration} min` : '--'}
         </p>
-      </div>
-      <div className="border-t border-[#333333] pt-4">
-        <Button
-          className="h-9 w-full gap-2 bg-white text-black hover:bg-gray-200"
-          onClick={handleSaveWorkout}
-          disabled={isSubmitting}
-        >
-          {isSubmitting ? 'Saving...' : 'Save Workout'}
-        </Button>
       </div>
     </div>
   );
-}
-
-// Helper function to calculate estimated workout duration
-function calculateWorkoutDuration(exercises) {
-  if (!exercises.length) return null;
-
-  let totalMinutes = 0;
-
-  for (const exercise of exercises) {
-    // Average time per set (including rest)
-    const restTime = exercise.restSeconds ? exercise.restSeconds / 60 : 1; // Default 1 min rest
-    const timePerSet = 1 + restTime; // Assume ~1 min to complete a set + rest time
-
-    // Total time for this exercise
-    totalMinutes += exercise.sets * timePerSet;
-  }
-
-  // Add some buffer time for transitions between exercises
-  totalMinutes += exercises.length * 0.5;
-
-  return Math.round(totalMinutes);
 }
