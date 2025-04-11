@@ -3,7 +3,7 @@
 
 import { db } from "@/server/db"; // Import db only for potentially fetching oldFolderId if needed here
 // Import the DB interaction functions from the query file
-import { createWorkout as createWorkoutInDb, updateWorkoutTemplateInDb, /* deleteWorkoutTemplateInDb */ } from "@/server/queries/workouts";
+import { createWorkout as createWorkoutInDb, deleteWorkoutTemplateInDb, updateWorkoutTemplateInDb, /* deleteWorkoutTemplateInDb */ } from "@/server/queries/workouts";
 import { type WorkoutFormState } from "@/types/store"; // Store type for form data
 import { createClient } from "@/utils/supabase/server";
 import { revalidatePath } from "next/cache";
@@ -151,42 +151,30 @@ export async function updateWorkoutAction(templateId: string, workoutData: Worko
 }
 
 // --- DELETE ACTION (Example) ---
-/*
-export async function deleteWorkoutAction(templateId: string) {
-    const supabase = await createClient();
-    const { data: { user }, error: authError } = await supabase.auth.getUser();
-     if (authError || !user) {
-        return { success: false, error: "Authentication required" };
+
+export async function deleteWorkoutAction(templateId: string, folderId: string) {
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { success: false, error: "Authentication required" };
+  }
+  const userId = user.id;
+
+  try {
+    // Call DB delete function (assuming it's renamed to deleteWorkoutTemplateInDb)
+    await deleteWorkoutTemplateInDb(templateId, userId); // Pass userId for safety check inside query too
+
+    revalidatePath('/dashboard');
+
+    if (folderId) {
+      revalidatePath(`/f/${folderId}`);
     }
-    const userId = user.id;
-
-    try {
-        // Optional: Fetch folderId *before* delete for revalidation
-        const template = await db.workout.findFirst({
-             where: { id: templateId, userId: userId },
-             select: { folderId: true }
-        });
-         if (!template) {
-             throw new Error("Workout template not found or user not authorized.");
-         }
-         const folderId = template.folderId;
-
-        // Call DB delete function (assuming it's renamed to deleteWorkoutTemplateInDb)
-        await deleteWorkoutTemplateInDb(templateId, userId); // Pass userId for safety check inside query too
-
-        revalidatePath('/dashboard');
-        if (folderId) {
-            revalidatePath(`/f/${folderId}`);
-        }
-        // Don't revalidate /w/[id] for a deleted item
-
-        return { success: true };
-    } catch (error) {
-         console.error(`Failed to delete workout template ${templateId}:`, error);
-         return {
-             success: false,
-             error: error instanceof Error ? error.message : `Failed to delete workout template`
-         };
-    }
+    return { success: true };
+  } catch (error) {
+    console.error(`Failed to delete workout template ${templateId}:`, error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : `Failed to delete workout template`
+    };
+  }
 }
-*/
