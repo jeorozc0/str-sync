@@ -1,240 +1,248 @@
-// db/workoutQueries.ts
-
 import { nanoid } from 'nanoid';
-import { type WorkoutFormState, type WorkoutExercise } from '../../types/store'; // Import your types
+import { type WorkoutFormState, type StoreWorkoutExercise } from '../../types/store';
 import { db } from '../db';
-import { type WorkoutTemplate } from '@/types/workout';
+import { type WorkoutTemplate, type PlannedExercise } from '@/types/workout';
 import { notFound } from 'next/navigation';
+import { Prisma } from '@prisma/client';
 
 /**
- * Creates a new workout with associated exercises in the database
+ * Creates a new workout template with associated exercises in the database.
  */
-export async function createWorkout(data: WorkoutFormState, userId: string) {
+// Input type WorkoutFormState is likely correct for data coming from the store/form
+export async function createWorkout(data: WorkoutFormState, userId: string): Promise<string> {
   const workoutId = nanoid(10);
+  console.log(`DB Query: Creating workout template "${data.name}" for User ${userId}`);
 
   return await db.$transaction(async (tx) => {
-    // Create the workout
     const workout = await tx.workout.create({
       data: {
         id: workoutId,
-        name: data.name,
-        description: data.description,
+        name: data.name.trim(),
+        description: data.description?.trim() ?? null,
         userId: userId,
-        folderId: data.folderId,
-        // We'll create exercises separately
+        folderId: data.folderId ?? null,
+        isArchived: false, // Explicitly set default if needed
       },
+      select: { id: true }
     });
 
-    // Create workout exercises
     if (data.exercises.length > 0) {
+      // Map from StoreWorkoutExercise to Prisma's WorkoutExercise input
+      const exercisesToCreate = data.exercises.map((exercise: StoreWorkoutExercise) => ({
+        id: nanoid(10), // Generate new ID for the join record
+        workoutId: workout.id,
+        exerciseId: exercise.exerciseId, // ID of master Exercise
+        order: exercise.order,
+        sets: exercise.sets,
+        reps: exercise.reps,
+        weight: exercise.weight, // Already optional number | undefined
+        restSeconds: exercise.restSeconds, // Already optional number | undefined
+        notes: exercise.notes?.trim() ?? null,
+        // rir: exercise.rir // Add if defined in schema & store type
+      }));
       await tx.workoutExercise.createMany({
-        data: data.exercises.map((exercise: WorkoutExercise) => ({
-          id: exercise.id || nanoid(10), // Use existing ID or create new one
-          workoutId: workout.id,
-          exerciseId: exercise.exerciseId,
-          order: exercise.order,
-          sets: exercise.sets,
-          reps: exercise.reps,
-          weight: exercise.weight,
-          restSeconds: exercise.restSeconds,
-          notes: exercise.notes,
-        })),
-
+        data: exercisesToCreate,
       });
+      console.log(`DB Query: Created ${exercisesToCreate.length} exercises for workout ${workout.id}`);
+    } else {
+      console.log(`DB Query: No exercises provided for workout ${workout.id}`);
     }
-
     return workout.id;
   });
 }
 
-// Initialize Prisma Client (consider creating a singleton instance for reuse)
-
 /**
- * Fetches a single Workout Template by its ID, including its planned exercises
- * and the associated master exercise details.
+ * Fetches a single Workout Template by its ID, including planned exercises
+ * and associated master exercise details. Performs authorization check.
  *
  * @param templateId The ID of the workout template to fetch.
- * @returns The workout template data or throws notFound if not found.
+ * @param userId The ID of the user requesting the template.
+ * @returns The workout template data matching the WorkoutTemplate type.
+ * @throws Throws Prisma.NotFoundError via notFound() if not found or user is not authorized.
  */
-export async function getWorkoutTemplateDetails(templateId: string): Promise<WorkoutTemplate> {
-  console.log(`Fetching workout template details from DB for id: ${templateId}`);
+// Return type is WorkoutTemplate based on src/types/workout.ts
+export async function getWorkoutTemplateDetails(templateId: string, userId: string): Promise<WorkoutTemplate> {
+  console.log(`DB Query: Fetching workout template details for id: ${templateId} by User: ${userId}`);
 
   try {
     const template = await db.workout.findUnique({
       where: {
         id: templateId,
-        // Optional: Add condition to ensure it's not archived or belongs to the correct user
-        // isArchived: false,
-        // userId: currentUserId, // Pass current user ID if implementing authorization
+        userId: userId, // Authorization check
       },
       include: {
-        // Include the planned exercises for this template
-        exercises: {
-          // Include the master exercise details for each planned exercise
+        exercises: { // Fetches WorkoutExercise records
           include: {
-            exercise: {
+            exercise: { // Includes related Exercise record
               select: {
                 id: true,
                 name: true,
-                muscleGroup: true, // This is 'category' in your UI
-                equipment: true,
-                // Select other Exercise fields if needed for display
+                muscleGroup: true,
+                equipment: true
               }
             }
           },
-          // Order the exercises within the template based on the 'order' field
-          orderBy: {
-            order: 'asc',
-          }
+          orderBy: { order: 'asc' }
         },
-        // Optionally include the folder details if needed immediately
-        folder: {
-          select: {
-            id: true,
-            name: true,
-          }
+        folder: { // Includes related Folder record
+          select: { id: true, name: true }
         }
-        // Optionally include a count of logs based on this template
-        // _count: {
-        //    select: { logs: true }
-        // }
+        // Optionally include log count:
+        // _count: { select: { logs: true } }
       }
     });
 
+    // Handle not found / unauthorized
     if (!template) {
-      console.error(`Workout template with id ${templateId} not found in DB.`);
-      notFound(); // Use Next.js notFound helper
+      console.error(`DB Query: Workout template ${templateId} not found or user ${userId} not authorized.`);
+      notFound(); // Trigger Next.js 404 page
     }
 
-    // --- Data Transformation (Map Prisma result to your UI Type) ---
-    // Prisma returns nested structures. We need to map this to your WorkoutTemplate type.
+    // --- Data Transformation to match WorkoutTemplate type ---
     const mappedTemplate: WorkoutTemplate = {
       id: template.id,
-      folderId: template.folderId ?? '', // Handle potential null folderId
+      folderId: template.folderId, // Stays null if null in DB
       name: template.name,
-      description: template.description,
+      description: template.description, // Stays null if null in DB
+      isArchived: template.isArchived,
+      userId: template.userId,
       createdAt: template.createdAt,
       updatedAt: template.updatedAt,
-      // isArchived: template.isArchived, // Include if needed
-      folderName: template.folder?.name, // Add folder name if included
-      // logCount: template._count?.logs, // Add log count if included
+      folderName: template.folder?.name ?? null, // Get name or null
+      // logCount: template._count?.logs // Assign if count was included
 
-      // Map the included planned exercises
-      plannedExercises: template.exercises.map(workoutExercise => ({
-        id: workoutExercise.id, // ID of the WorkoutExercise record
-        exerciseId: workoutExercise.exerciseId, // ID of the master Exercise
-        name: workoutExercise.exercise.name, // Name from the master Exercise
-        targetSets: workoutExercise.sets,
-        targetReps: workoutExercise.reps, // String like "8-12" or "5"
-        targetWeight: workoutExercise.weight, // Optional target weight
-        targetRestTime: workoutExercise.restSeconds ?? 0, // Default if null
-        targetRir: undefined, // Add if you add targetRir to schema
-        notes: workoutExercise.notes,
-        // Include category/equipment denormalized from the master Exercise
-        category: workoutExercise.exercise.muscleGroup,
-        equipment: workoutExercise.exercise.equipment,
-        order: workoutExercise.order, // Keep order if needed later
+      // Map WorkoutExercise[] to PlannedExercise[]
+      plannedExercises: template.exercises.map((workoutExercise): PlannedExercise => ({
+        id: workoutExercise.id,          // WorkoutExercise ID
+        exerciseId: workoutExercise.exerciseId,  // Master Exercise ID
+        order: workoutExercise.order,      // Order from WorkoutExercise
+        name: workoutExercise.exercise.name, // Denormalized name
+        targetSets: workoutExercise.sets,      // WorkoutExercise.sets
+        targetReps: workoutExercise.reps,      // WorkoutExercise.reps
+        targetWeight: workoutExercise.weight,    // WorkoutExercise.weight (null if null)
+        targetRestTime: workoutExercise.restSeconds, // WorkoutExercise.restSeconds (null if null)
+        // targetRir: workoutExercise.rir // Map if added to schema
+        notes: workoutExercise.notes,      // WorkoutExercise.notes (null if null)
+        category: workoutExercise.exercise.muscleGroup, // Map from muscleGroup
+        equipment: workoutExercise.exercise.equipment, // Exercise.equipment (null if null)
       })),
-
-      // Add calculated fields if needed (or calculate in utils/component)
-      // estimatedDurationMinutes: calculateDuration(template.exercises),
-      // primaryMuscleGroups: calculateMuscleGroups(template.exercises),
     };
+    // --- End Transformation ---
 
-    console.log(`Successfully fetched and mapped template: ${template.name}`);
+    console.log(`DB Query: Successfully fetched and mapped template: ${template.name}`);
     return mappedTemplate;
 
   } catch (error) {
-    console.error(`Error fetching workout template ${templateId}:`, error);
-    // Rethrow or handle appropriately - could redirect to an error page
-    // For now, let's rethrow to indicate failure
-    throw new Error(`Failed to fetch workout template ${templateId}.`);
-  } finally {
-    // Disconnect Prisma client if not using a singleton instance per request
-    // await prisma.$disconnect();
+    console.error(`DB Query Error fetching workout template ${templateId}:`, error);
+    // If it's the specific notFound error, re-trigger it
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+      notFound();
+    }
+    // Otherwise, throw a generic error for other DB issues
+    throw new Error(`Database error fetching workout template.`);
   }
 }
 
+// Interface matching data structure from the form/store for updates
 interface UpdateWorkoutTemplateData {
   name: string;
   description?: string | null;
   folderId?: string | null;
-  exercises: { // Structure matching WorkoutExercise createMany input
-    exerciseId: string;
+  // Array structure should match StoreWorkoutExercise or how form data is structured
+  exercises: {
+    exerciseId: string; // Master Exercise ID
     order: number;
     sets: number;
     reps: string;
     weight?: number | null;
     restSeconds?: number | null;
     notes?: string | null;
-    // RIR if added to schema
+    // rir?: number | null; // Add if needed
   }[];
 }
 
 /**
  * Updates a workout template and its associated exercises within a transaction.
- * Assumes authorization checks have been performed before calling this.
- *
- * @param templateId The ID of the template to update.
- * @param data The validated and formatted data for the update.
- * @param userId The ID of the user performing the update (for potential future checks inside transaction if needed).
- * @returns The ID of the updated workout template.
- * @throws Throws error if update fails (e.g., template not found, transaction error).
+ * Performs an authorization check.
  */
+// Input type UpdateWorkoutTemplateData is based on expected form data structure
 export async function updateWorkoutTemplateInDb(
   templateId: string,
   data: UpdateWorkoutTemplateData,
-  userId: string // Pass userId, might be needed for complex logic/logging later
-): Promise<string> {
-  console.log(`DB Query: Updating template ${templateId} with data:`, data);
+  userId: string
+): Promise<string> { // Returns the ID of the updated template
+  console.log(`DB Query: Updating template ${templateId} by User ${userId}`);
 
-  return await db.$transaction(async (tx) => {
-    // 1. Update Workout (template) details
-    // Note: We assume ownership check happened in the Server Action before calling this query
-    const updatedTemplate = await tx.workout.update({
-      where: { id: templateId, userId: userId /* Optionally add userId here too for extra safety: , userId: userId */ },
-      data: {
-        name: data.name.trim(),
-        description: data.description?.trim() ?? null, // Ensure null if empty/undefined
-        folderId: data.folderId ?? null, // Ensure null if empty/undefined
-      },
-      select: { id: true } // Only need ID
-    });
-
-    if (!updatedTemplate) {
-      // This check might be redundant if the action verified ownership, but good safety.
-      throw new Error(`Template with ID ${templateId} not found during update.`);
-    }
-
-    // 2. Delete existing WorkoutExercise entries
-    await tx.workoutExercise.deleteMany({
-      where: { workoutId: templateId },
-    });
-    console.log(`DB Query: Deleted old exercises for template ${templateId}`);
-
-
-    // 3. Create new WorkoutExercise entries
-    if (data.exercises.length > 0) {
-      const exercisesToCreate = data.exercises.map(exercise => ({
-        id: nanoid(10), // Generate new ID for join record
-        workoutId: templateId,
-        exerciseId: exercise.exerciseId,
-        order: exercise.order,
-        sets: exercise.sets,
-        reps: exercise.reps,
-        weight: exercise.weight, // Pass directly (null/number)
-        restSeconds: exercise.restSeconds, // Pass directly (null/number)
-        notes: exercise.notes, // Pass directly (null/string)
-      }));
-
-      await tx.workoutExercise.createMany({
-        data: exercisesToCreate,
+  try {
+    return await db.$transaction(async (tx) => {
+      // 1. Update Workout details, checking ownership
+      const updatedTemplate = await tx.workout.updateMany({
+        where: { id: templateId, userId: userId },
+        data: {
+          name: data.name.trim(),
+          description: data.description?.trim() ?? null,
+          folderId: data.folderId ?? null,
+          updatedAt: new Date(),
+        },
       });
-      console.log(`DB Query: Created ${data.exercises.length} new exercises for template ${templateId}`);
-    } else {
-      console.log(`DB Query: No exercises to create for template ${templateId}`);
-    }
 
-    return templateId; // Return the template ID on successful transaction
+      if (updatedTemplate.count === 0) {
+        throw new Error(`Template not found or update permission denied.`);
+      }
+      console.log(`DB Query: Updated details for template ${templateId}`);
+
+      // 2. Delete existing WorkoutExercise entries
+      await tx.workoutExercise.deleteMany({
+        where: { workoutId: templateId },
+      });
+      console.log(`DB Query: Deleted old exercises for template ${templateId}`);
+
+      // 3. Create new WorkoutExercise entries
+      if (data.exercises.length > 0) {
+        // Map from UpdateWorkoutTemplateData structure to Prisma input
+        const exercisesToCreate = data.exercises.map(exercise => ({
+          id: nanoid(10), // Generate new ID
+          workoutId: templateId,
+          exerciseId: exercise.exerciseId,
+          order: exercise.order,
+          sets: exercise.sets,
+          reps: exercise.reps,
+          weight: exercise.weight,
+          restSeconds: exercise.restSeconds,
+          notes: exercise.notes?.trim() ?? null,
+          // rir: exercise.rir // Add if part of data/schema
+        }));
+
+        await tx.workoutExercise.createMany({ data: exercisesToCreate });
+        console.log(`DB Query: Created ${exercisesToCreate.length} new exercises for template ${templateId}`);
+      } else {
+        console.log(`DB Query: No new exercises to create for template ${templateId}`);
+      }
+
+      return templateId; // Return ID on success
+    });
+  } catch (error) {
+    console.error(`DB Query Error updating template ${templateId}:`, error);
+    // Re-throw error for the calling action to handle
+    throw error;
+  }
+}
+
+/**
+ * Deletes a workout template owned by the specified user.
+ */
+// No change needed here, already aligns with schema
+export async function deleteWorkoutTemplateInDb(
+  templateId: string,
+  userId: string
+): Promise<void> {
+  console.log(`DB Query: Attempting delete for template ${templateId} by User ${userId}`);
+  const result = await db.workout.deleteMany({
+    where: { id: templateId, userId: userId }
   });
+  if (result.count === 0) {
+    console.error(`DB Query: Delete failed. Template ${templateId} not found or user ${userId} not authorized.`);
+    throw new Error("Workout template not found or permission denied.");
+  }
+  console.log(`DB Query: Successfully deleted template ${templateId}.`);
 }
