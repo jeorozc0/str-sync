@@ -1,4 +1,5 @@
 import { type Exercise } from "@/types/exercises"
+import { type PlannedExercise } from "@/types/workout"
 
 // Calculate estimated workout duration
 export function calculateDuration(exercises: Exercise[]): string {
@@ -36,4 +37,36 @@ export function getAverageIntensity(exercises: Exercise[]): string {
   if (avgRIR <= 4) return "Moderate"
   return "Light"
 }
+export function estimateTemplateDuration(exercises: PlannedExercise[]): number | null {
+  if (!exercises || exercises.length === 0) return null;
 
+  let totalMinutes = 0;
+  exercises.forEach(ex => {
+    // Estimate time per set = (reps * ~3s) + rest time
+    // Let's simplify: ~1 minute work per set + rest time (converted to minutes)
+    const repsTime = 1; // Assume roughly 1 min per set including effort
+    const restTimeMinutes = ex.targetRestTime / 60;
+    // Total time for this exercise = sets * (work_time + rest_time) - one_less_rest_time
+    const exerciseTime = ex.targetSets * (repsTime + restTimeMinutes) - (ex.targetSets > 0 ? restTimeMinutes : 0);
+    totalMinutes += exerciseTime;
+  });
+
+  return Math.round(totalMinutes);
+}
+
+export function getPrimaryMuscleGroups(exercises: PlannedExercise[]): string[] {
+  if (!exercises || exercises.length === 0) return [];
+
+  const groupCounts: Record<string, number> = {};
+  exercises.forEach(ex => {
+    if (ex.category) {
+      groupCounts[ex.category] = (groupCounts[ex.category] ?? 0) + 1; // Count exercises per category
+    }
+  });
+
+  // Return top 3 most frequent categories (or adjust logic)
+  return Object.entries(groupCounts)
+    .sort(([, countA], [, countB]) => countB - countA)
+    .slice(0, 3)
+    .map(([name]) => name);
+}
