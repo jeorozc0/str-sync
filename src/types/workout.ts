@@ -41,30 +41,40 @@ export interface VolumeData {
   volume: number; // Total reps (sets * reps)
 }
 
+// Represents a specific exercise planned within a workout template.
+// This often corresponds to a record in a join table like 'WorkoutExercise'.
 export interface PlannedExercise {
-  id: string; // Unique ID within the template
-  exerciseId: string; // Reference to a master exercise definition (optional)
-  name: string; // Exercise Name
-  targetSets: number;
-  targetReps: string; // Can be a range like "8-12" or a number "5"
-  targetRir?: number; // Optional target intensity
-  targetRestTime: number; // in seconds
-  notes?: string; // Notes specific to this exercise in the template
-  category?: string; // Denormalized for easier display
-  equipment?: string; // Denormalized for easier display
+  id: string;          // WorkoutExercise ID
+  exerciseId: string;  // Master Exercise ID
+  order: number;       // Order within the template
+  name: string;        // Denormalized Exercise name
+  targetSets: number;  // From WorkoutExercise.sets
+  targetReps: string;  // From WorkoutExercise.reps (e.g., "8-12")
+  targetWeight?: number | null; // From WorkoutExercise.weight
+  targetRestTime?: number | null; // From WorkoutExercise.restSeconds
+  // targetRir?: number | null; // Add if you add RIR to WorkoutExercise schema
+  notes?: string | null; // From WorkoutExercise.notes
+
+  // Denormalized fields from the master Exercise model
+  category?: string | null; // From Exercise.muscleGroup
+  equipment?: string | null; // From Exercise.equipment
 }
 
+// Represents a workout template/plan.
+// Corresponds to the 'Workout' model in Prisma.
 export interface WorkoutTemplate {
-  id: string;
-  folderId: string;
-  name: string;
-  description?: string;
-  // Exercises planned for this template
-  plannedExercises: PlannedExercise[];
-  // Metadata (optional)
-  createdAt: Date;
-  updatedAt: Date;
-  // Calculated/derived properties (optional)
-  estimatedDurationMinutes?: number;
-  primaryMuscleGroups?: string[];
+  id: string;           // Workout ID
+  folderId: string | null; // Workout.folderId
+  name: string;         // Workout.name
+  description?: string | null; // Workout.description
+  isArchived: boolean;  // Workout.isArchived (useful for UI filtering)
+  createdAt: Date;      // Workout.createdAt
+  updatedAt: Date;      // Workout.updatedAt
+  userId: string;       // Workout.userId
+
+  plannedExercises: PlannedExercise[]; // Array of exercises planned for this template
+
+  // Optional fields populated by specific queries (e.g., using include or _count)
+  folderName?: string | null;
+  logCount?: number; // If _count: { logs: true } is included
 }
