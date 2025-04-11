@@ -147,12 +147,12 @@ export default function ExerciseDialog({
         <div className="max-h-[70vh] overflow-y-auto space-y-4 py-4 pr-2 pl-1 custom-scrollbar">
           {/* Tabs for Exercise Selection */}
           <Tabs defaultValue="search" className="w-full">
-            <TabsList className="border border-[#333333] bg-[#1A1A1A]">
-              <TabsTrigger value="search">Search</TabsTrigger>
-              {/* Add Recent/Favorites later */}
-              {/* <TabsTrigger value="recent">Recent</TabsTrigger>
-              <TabsTrigger value="favorites">Favorites</TabsTrigger> */}
-            </TabsList>
+            {/*   <TabsList className="border border-[#333333] bg-[#1A1A1A]"> */}
+            {/*     <TabsTrigger value="search">Search</TabsTrigger> */}
+            {/*     {/* Add Recent/Favorites later */}
+            {/*     {/* <TabsTrigger value="recent">Recent</TabsTrigger> */}
+            {/*     <TabsTrigger value="favorites">Favorites</TabsTrigger> */}
+            {/*   </TabsList> */}
 
             <TabsContent value="search" className="mt-4 space-y-4">
               <div className="relative">
@@ -348,7 +348,7 @@ export default function ExerciseDialog({
           </Button>
         </DialogFooter>
       </DialogContent>
-    </Dialog>
+    </Dialog >
   );
 }
 

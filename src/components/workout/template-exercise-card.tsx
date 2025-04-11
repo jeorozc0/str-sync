@@ -1,4 +1,3 @@
-// src/components/templates/TemplateExerciseCard.tsx
 "use client";
 
 import { Card, CardContent } from "@/components/ui/card";
