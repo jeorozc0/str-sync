@@ -7,6 +7,8 @@ import { type Exercise, type ExerciseLogEntry, Prisma, type User, type Workout, 
 import { nanoid } from 'nanoid';
 import { revalidatePath } from 'next/cache';
 import { notFound } from 'next/navigation';
+import { z } from "zod"; // For input validation
+
 
 /**
  * Creates initial WorkoutLog and ExerciseLogEntry records when starting a workout from a template.
@@ -326,6 +328,168 @@ export async function getWorkoutLogDetailsAction(
     return {
       logDetails: null,
       error: error instanceof Error ? error.message : 'Failed to load workout log.'
+    };
+  }
+}
+
+// --- Define Input Schema using Zod for validation ---
+const exerciseSetSchema = z.object({
+  setNumber: z.number().int().positive(),
+  weight: z.number().nullable(),
+  reps: z.number().int().positive(), // Assuming reps must be positive
+  rpe: z.number().min(0).max(10).nullable(),
+});
+
+const loggedExerciseSchema = z.object({
+  templateWorkoutExerciseId: z.string(), // ID of the WorkoutExercise from the template
+  notes: z.string().nullable(),
+  sets: z.array(exerciseSetSchema),
+});
+
+const sessionDataSchema = z.object({
+  userId: z.string().uuid(), // Ensure it's a valid UUID
+  workoutId: z.string(), // ID of the Workout template used
+  startedAt: z.date(),
+  completedAt: z.date(),
+  duration: z.number().int().nonnegative(),
+  notes: z.string().nullable(), // Overall workout notes
+  exercises: z.array(loggedExerciseSchema),
+});
+
+// Type inferred from the Zod schema
+export type SessionData = z.infer<typeof sessionDataSchema>;
+
+// Define the return type for the action
+type SaveResult =
+  | { success: true; logId: string }
+  | { success: false; error: string };
+
+/**
+ * Server action to save a completed workout session to the database.
+ * Creates WorkoutLog, ExerciseLogEntry, and ExerciseSet records within a transaction.
+ *
+ * @param sessionData The collected data from the client-side logging session.
+ * @returns Object indicating success status and the new log ID, or an error message.
+ */
+/**
+ * Server action to save a completed workout session to the database.
+ */
+export async function saveWorkoutSession(
+  sessionData: SessionData
+): Promise<SaveResult> {
+  console.log("Received session data for saving:", JSON.stringify(sessionData, null, 2));
+
+  const validation = sessionDataSchema.safeParse(sessionData);
+  if (!validation.success) {
+    console.error("❌ Invalid session data received:", JSON.stringify(validation.error.flatten(), null, 2));
+    return { success: false, error: "Invalid data format received by server." };
+  }
+  console.log("✅ Session data passed Zod validation.");
+
+  const {
+    userId,
+    workoutId,
+    startedAt,
+    completedAt,
+    duration,
+    notes: workoutNotes,
+    exercises: loggedExercises,
+  } = validation.data;
+
+  try {
+    console.log("🏁 Starting database transaction...");
+    const result = await db.$transaction(async (tx) => {
+      // --- a. Create WorkoutLog ---
+      const newWorkoutLogId = nanoid(10); // Generate ID for WorkoutLog
+      const workoutLogData = {
+        id: newWorkoutLogId, // *** Provide the generated ID ***
+        userId,
+        workoutId,
+        startedAt,
+        completedAt,
+        duration,
+        notes: workoutNotes,
+      };
+      console.log("  Creating WorkoutLog with data:", workoutLogData);
+      const newWorkoutLog = await tx.workoutLog.create({ data: workoutLogData });
+      console.log(`  ✅ Created WorkoutLog ID: ${newWorkoutLog.id}`);
+
+      // --- b. Create Entries and Sets ---
+      let entryCounter = 0;
+      for (const loggedExercise of loggedExercises) {
+        entryCounter++;
+        console.log(`  Processing Exercise ${entryCounter}/${loggedExercises.length} (Template ID: ${loggedExercise.templateWorkoutExerciseId})`);
+
+        // --- c. Create ExerciseLogEntry ---
+        const newEntryId = nanoid(10); // Generate ID for ExerciseLogEntry
+        const entryData = {
+          id: newEntryId, // *** Provide the generated ID ***
+          workoutLogId: newWorkoutLog.id,
+          workoutExerciseId: loggedExercise.templateWorkoutExerciseId,
+        };
+        console.log(`    Creating ExerciseLogEntry with data:`, entryData);
+        const newEntry = await tx.exerciseLogEntry.create({ data: entryData });
+        console.log(`    ✅ Created ExerciseLogEntry ID: ${newEntry.id}`);
+
+        // --- d. Create ExerciseSets ---
+        if (loggedExercise.sets && loggedExercise.sets.length > 0) {
+          // Prepare data for createMany, generating IDs within the map
+          const setsData = loggedExercise.sets.map((set) => ({
+            id: nanoid(10), // *** Provide generated ID for each set ***
+            exerciseLogEntryId: newEntry.id,
+            setNumber: set.setNumber,
+            weight: set.weight,
+            reps: set.reps,
+            rpe: set.rpe,
+            isCompleted: true,
+          }));
+          console.log(`      Creating ${setsData.length} ExerciseSets for Entry ${newEntry.id} with data:`, setsData);
+          const createdSetsResult = await tx.exerciseSet.createMany({ data: setsData });
+          console.log(`      ✅ Created ${createdSetsResult.count} ExerciseSets for Entry ${newEntry.id}`);
+        } else {
+          console.log(`      ℹ️ No sets to create for Entry ${newEntry.id}`);
+        }
+      } // End loop through exercises
+
+      console.log("  Transaction steps completed.");
+      return newWorkoutLog.id; // Return the ID of the main log
+    }); // --- End of Transaction ---
+
+    console.log(`✅ Database transaction successful. New WorkoutLog ID: ${result}`);
+
+    // 3. Revalidate relevant paths (optional)
+    try {
+      console.log(`🔄 Revalidating paths: /logs and /logs/${result}`);
+      revalidatePath('/logs');
+      revalidatePath(`/logs/${result}`);
+      console.log(`🔄 Path revalidation complete.`);
+    } catch (revalError) {
+      console.warn("⚠️ Path revalidation failed (this might be expected in some environments):", revalError);
+    }
+
+    // 4. Return Success
+    return { success: true, logId: result };
+
+  } catch (error) {
+    console.error("❌ Error during database transaction:", error);
+    let errorMessage = "Database error: Failed to save workout session.";
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error("  Prisma Error Code:", error.code);
+      if (error.meta) console.error("  Prisma Meta:", error.meta);
+      if (error.code === 'P2002') errorMessage = "Database error: A unique constraint was violated during save.";
+      else if (error.code === 'P2003') errorMessage = "Database error: A related record was not found.";
+      else if (error.code === 'P2011') errorMessage = "Database error: A required field was missing a value.";
+    } else if (error instanceof Prisma.PrismaClientValidationError) {
+      console.error("  Prisma Validation Error:", error.message);
+      errorMessage = "Database error: Data validation failed before saving.";
+    } else if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
+    return {
+      success: false,
+      error: errorMessage,
     };
   }
 }
