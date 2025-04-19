@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   Dialog,
   DialogContent,
@@ -32,12 +32,12 @@ import {
 } from "@/components/ui/select";
 import { type StoreWorkoutExercise } from "@/types/store";
 import { filterExercises } from "@/utils/filter-exercises";
-import { type Exercise as PrismaExercise } from '@prisma/client';
+import { type Exercise as PrismaExercise } from "@prisma/client";
 import { toast } from "sonner";
 import { useMediaQuery } from "@/hooks/use-media-query";
 
 // Default state for a NEW exercise when adding
-const defaultNewExerciseState: Omit<StoreWorkoutExercise, 'order'> = {
+const defaultNewExerciseState: Omit<StoreWorkoutExercise, "order"> = {
   id: "",
   sets: 3,
   reps: "8-12",
@@ -54,6 +54,33 @@ const defaultNewExerciseState: Omit<StoreWorkoutExercise, 'order'> = {
   },
 };
 
+// Constants for Select Options
+const SET_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+const REP_OPTIONS = [
+  "5",
+  "6",
+  "8",
+  "10",
+  "12",
+  "15",
+  "20",
+  "5-8",
+  "8-12",
+  "10-15",
+  "12-15",
+  "15-20",
+  "AMRAP",
+];
+const RIR_OPTIONS = [
+  { value: "none", label: "None" },
+  { value: "0", label: "0 (Failure)" },
+  { value: "1", label: "1 (Near Failure)" },
+  { value: "2", label: "2 (Hard)" },
+  { value: "3", label: "3 (Moderate)" },
+  { value: "4", label: "4 (Easy)" },
+];
+const REST_OPTIONS = [30, 45, 60, 75, 90, 120, 150, 180, 240];
+
 interface ExerciseDialogProps {
   open: boolean;
   onClose: () => void;
@@ -65,7 +92,6 @@ interface ExerciseDialogProps {
   fetchError: string | null;
 }
 
-// Interface for the ExerciseForm component props
 interface ExerciseFormProps {
   currentExercise: StoreWorkoutExercise;
   setCurrentExercise: React.Dispatch<React.SetStateAction<StoreWorkoutExercise>>;
@@ -91,26 +117,25 @@ export default function ExerciseDialog({
 }: ExerciseDialogProps) {
   const isDesktop = useMediaQuery("(min-width: 768px)");
 
-  // Internal state for the exercise being configured
   const [currentExercise, setCurrentExercise] = useState<StoreWorkoutExercise>(
-    () => exercise ? { ...exercise } : { ...defaultNewExerciseState, order: 0 }
+    () =>
+      exercise ? { ...exercise } : { ...defaultNewExerciseState, order: 0 },
   );
   const [exerciseSearchQuery, setExerciseSearchQuery] = useState("");
   const [showExerciseSelection, setShowExerciseSelection] = useState(true);
 
-  // Reset internal state when dialog opens or exercise changes
   useEffect(() => {
     if (open) {
-      setCurrentExercise(exercise ? { ...exercise } : { ...defaultNewExerciseState, order: 0 });
+      setCurrentExercise(
+        exercise ? { ...exercise } : { ...defaultNewExerciseState, order: 0 },
+      );
       setExerciseSearchQuery("");
-      // If editing an existing exercise, collapse the selection section
       setShowExerciseSelection(!isEditing);
     }
   }, [exercise, open, isEditing]);
 
-  // Handler when a master exercise is selected
   const handleSelectExercise = useCallback((dbExercise: PrismaExercise) => {
-    setCurrentExercise(prev => ({
+    setCurrentExercise((prev) => ({
       ...prev,
       exerciseId: dbExercise.id,
       exercise: {
@@ -120,16 +145,13 @@ export default function ExerciseDialog({
         equipment: dbExercise.equipment ?? undefined,
       },
     }));
-    // Collapse the exercise selection section after selecting
     setShowExerciseSelection(false);
   }, []);
 
-  // Toggle exercise selection visibility
   const toggleExerciseSelection = useCallback(() => {
-    setShowExerciseSelection(prev => !prev);
+    setShowExerciseSelection((prev) => !prev);
   }, []);
 
-  // Handler for save button click
   const handleSaveClick = useCallback(() => {
     if (!currentExercise.exerciseId || !currentExercise.exercise.name) {
       toast.error("Please select an exercise from the list.");
@@ -138,10 +160,11 @@ export default function ExerciseDialog({
     onSave(currentExercise);
   }, [currentExercise, onSave]);
 
-  // Filter available exercises based on search query
-  const filteredAvailableExercises = filterExercises(availableExercises, exerciseSearchQuery);
+  // FIX: Memoize filtered exercises to avoid recalculation on every render
+  const filteredAvailableExercises = useMemo(() => {
+    return filterExercises(availableExercises, exerciseSearchQuery);
+  }, [availableExercises, exerciseSearchQuery]);
 
-  // Render Dialog for desktop
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
@@ -152,6 +175,7 @@ export default function ExerciseDialog({
             </DialogTitle>
           </DialogHeader>
 
+          {/* Use ScrollArea for consistent scrollbar styling if needed, or keep div */}
           <div className="max-h-[70vh] overflow-y-auto py-4 pr-2 pl-1 custom-scrollbar">
             <ExerciseForm
               currentExercise={currentExercise}
@@ -198,7 +222,11 @@ export default function ExerciseDialog({
           </DrawerTitle>
         </DrawerHeader>
 
-        <div className="px-4 py-4 overflow-y-auto max-h-[calc(100vh-10rem)]">
+        {/* FIX: Use dvh for height and add overscroll-behavior */}
+        <div
+          className="px-4 py-4 overflow-y-auto max-h-[calc(100dvh-10rem)]" // Use dvh
+          style={{ overscrollBehavior: "contain" }} // Prevent body scroll
+        >
           <ExerciseForm
             currentExercise={currentExercise}
             setCurrentExercise={setCurrentExercise}
@@ -234,7 +262,6 @@ export default function ExerciseDialog({
   );
 }
 
-// Separate form component to handle inputs
 function ExerciseForm({
   currentExercise,
   setCurrentExercise,
@@ -247,20 +274,22 @@ function ExerciseForm({
   isLoadingExercises,
   fetchError,
 }: ExerciseFormProps) {
-  // Handler for input changes
-  const handleInputChange = useCallback(<K extends keyof StoreWorkoutExercise>(
-    field: K,
-    value: StoreWorkoutExercise[K] | string | number
-  ) => {
-    setCurrentExercise(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  }, [setCurrentExercise]);
+  const handleInputChange = useCallback(
+    <K extends keyof StoreWorkoutExercise>(
+      field: K,
+      value: StoreWorkoutExercise[K] | string | number,
+    ) => {
+      setCurrentExercise((prev) => ({
+        ...prev,
+        [field]: value,
+      }));
+    },
+    [setCurrentExercise],
+  );
 
   return (
     <div className="space-y-4">
-      {/* Exercise Selection Section with Toggle */}
+      {/* Exercise Selection Section */}
       <div className="space-y-3">
         {currentExercise.exerciseId && (
           <div className="flex items-center justify-between">
@@ -274,15 +303,18 @@ function ExerciseForm({
               onClick={toggleExerciseSelection}
             >
               {showExerciseSelection ? (
-                <>Hide Selection <ChevronUp className="ml-1 h-3 w-3" /></>
+                <>
+                  Hide Selection <ChevronUp className="ml-1 h-3 w-3" />
+                </>
               ) : (
-                <>Change Exercise <ChevronDown className="ml-1 h-3 w-3" /></>
+                <>
+                  Change Exercise <ChevronDown className="ml-1 h-3 w-3" />
+                </>
               )}
             </Button>
           </div>
         )}
 
-        {/* Exercise Selection Area - Collapsible */}
         {(showExerciseSelection || !currentExercise.exerciseId) && (
           <Tabs defaultValue="search" className="w-full">
             <TabsContent value="search" className="mt-2 space-y-3">
@@ -290,19 +322,23 @@ function ExerciseForm({
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
                 <Input
                   placeholder="Search exercises by name, muscle, equipment..."
-                  className="border-[#333333] bg-[#1A1A1A] pl-9"
+                  // FIX: Use text-base on mobile to prevent zoom
+                  className="border-[#333333] bg-[#1A1A1A] pl-9 text-base md:text-sm"
                   value={exerciseSearchQuery}
                   onChange={(e) => setExerciseSearchQuery(e.target.value)}
                   aria-label="Search exercises"
                 />
               </div>
 
-              {/* Exercise List Scroll Area */}
               <ScrollArea className="h-[200px] rounded-md border border-[#333333] p-2">
                 {isLoadingExercises ? (
-                  <div className="py-8 text-center text-gray-400">Loading...</div>
+                  <div className="py-8 text-center text-gray-400">
+                    Loading...
+                  </div>
                 ) : fetchError ? (
-                  <div className="py-8 text-center text-red-400">{fetchError}</div>
+                  <div className="py-8 text-center text-red-400">
+                    {fetchError}
+                  </div>
                 ) : filteredAvailableExercises.length > 0 ? (
                   <div className="space-y-1.5">
                     {filteredAvailableExercises.map((dbExercise) => (
@@ -315,10 +351,14 @@ function ExerciseForm({
                           : "border border-transparent"
                           }`}
                         onClick={() => handleSelectExercise(dbExercise)}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSelectExercise(dbExercise)}
+                        onKeyDown={(e) =>
+                          e.key === "Enter" && handleSelectExercise(dbExercise)
+                        }
                       >
                         <div>
-                          <div className="font-medium text-sm">{dbExercise.name}</div>
+                          <div className="font-medium text-sm">
+                            {dbExercise.name}
+                          </div>
                           <div className="flex items-center gap-1.5 text-xs text-gray-400 mt-0.5">
                             <span>{dbExercise.muscleGroup}</span>
                             {dbExercise.equipment && (
@@ -348,7 +388,10 @@ function ExerciseForm({
 
       {/* Configuration Section */}
       {currentExercise.exerciseId && (
-        <div className={`space-y-4 ${showExerciseSelection ? 'border-t border-[#333333] pt-4' : ''}`}>
+        <div
+          className={`space-y-4 ${showExerciseSelection ? "border-t border-[#333333] pt-4" : ""
+            }`}
+        >
           <div>
             <h3 className="mb-2 text-base font-semibold text-blue-300">
               Configure: {currentExercise.exercise.name}
@@ -358,28 +401,40 @@ function ExerciseForm({
                 {currentExercise.exercise.muscleGroup}
               </Badge>
               {currentExercise.exercise.equipment && (
-                <Badge variant="outline" className="text-xs bg-[#1A1A1A] border-[#333333]">
+                <Badge
+                  variant="outline"
+                  className="text-xs bg-[#1A1A1A] border-[#333333]"
+                >
                   {currentExercise.exercise.equipment}
                 </Badge>
               )}
             </div>
           </div>
 
-          {/* Grid for Sets, Reps, RIR, Rest */}
           <div className="grid grid-cols-2 gap-4">
             {/* Sets */}
             <div className="space-y-1.5">
-              <Label htmlFor="sets" className="text-xs">Target Sets</Label>
+              <Label htmlFor="sets" className="text-xs">
+                Target Sets
+              </Label>
               <Select
                 value={currentExercise.sets?.toString() ?? "3"}
-                onValueChange={(value) => handleInputChange('sets', Number.parseInt(value))}
+                onValueChange={(value) =>
+                  handleInputChange("sets", Number.parseInt(value))
+                }
               >
-                <SelectTrigger id="sets" className="border-[#333333] bg-[#1A1A1A] h-9 text-sm">
+                <SelectTrigger
+                  id="sets"
+                  // FIX: Use text-base on mobile to prevent zoom
+                  className="border-[#333333] bg-[#1A1A1A] h-9 text-base md:text-sm"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-[#333333] bg-[#111111] text-white">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
-                    <SelectItem key={num} value={num.toString()}>{num}</SelectItem>
+                  {SET_OPTIONS.map((num) => (
+                    <SelectItem key={num} value={num.toString()}>
+                      {num}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -387,17 +442,25 @@ function ExerciseForm({
 
             {/* Reps */}
             <div className="space-y-1.5">
-              <Label htmlFor="reps" className="text-xs">Target Reps</Label>
+              <Label htmlFor="reps" className="text-xs">
+                Target Reps
+              </Label>
               <Select
                 value={currentExercise.reps ?? "8-12"}
-                onValueChange={(value) => handleInputChange('reps', value)}
+                onValueChange={(value) => handleInputChange("reps", value)}
               >
-                <SelectTrigger id="reps" className="border-[#333333] bg-[#1A1A1A] h-9 text-sm">
+                <SelectTrigger
+                  id="reps"
+                  // FIX: Use text-base on mobile to prevent zoom
+                  className="border-[#333333] bg-[#1A1A1A] h-9 text-base md:text-sm"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-[#333333] bg-[#111111] text-white">
-                  {["5", "6", "8", "10", "12", "15", "20", "5-8", "8-12", "10-15", "12-15", "15-20", "AMRAP"].map(num => (
-                    <SelectItem key={num} value={num}>{num}</SelectItem>
+                  {REP_OPTIONS.map((rep) => (
+                    <SelectItem key={rep} value={rep}>
+                      {rep}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -405,44 +468,62 @@ function ExerciseForm({
 
             {/* RIR (Optional) */}
             <div className="space-y-1.5">
-              <Label htmlFor="intensity" className="text-xs">Target RIR (Optional)</Label>
+              <Label htmlFor="intensity" className="text-xs">
+                Target RIR (Optional)
+              </Label>
               <Select
-                value={currentExercise.rir !== undefined ? currentExercise.rir.toString() : "none"}
+                value={
+                  currentExercise.rir !== undefined
+                    ? currentExercise.rir.toString()
+                    : "none"
+                }
                 onValueChange={(value) => {
-                  if (value === "none") {
-                    handleInputChange('rir', undefined);
-                  } else {
-                    handleInputChange('rir', Number.parseInt(value));
-                  }
+                  handleInputChange(
+                    "rir",
+                    value === "none" ? undefined : Number.parseInt(value),
+                  );
                 }}
               >
-                <SelectTrigger id="intensity" className="border-[#333333] bg-[#1A1A1A] h-9 text-sm">
+                <SelectTrigger
+                  id="intensity"
+                  // FIX: Use text-base on mobile to prevent zoom
+                  className="border-[#333333] bg-[#1A1A1A] h-9 text-base md:text-sm"
+                >
                   <SelectValue placeholder="Select RIR" />
                 </SelectTrigger>
                 <SelectContent className="border-[#333333] bg-[#111111] text-white">
-                  <SelectItem value="none">None</SelectItem>
-                  <SelectItem value="0">0 (Failure)</SelectItem>
-                  <SelectItem value="1">1 (Near Failure)</SelectItem>
-                  <SelectItem value="2">2 (Hard)</SelectItem>
-                  <SelectItem value="3">3 (Moderate)</SelectItem>
-                  <SelectItem value="4">4 (Easy)</SelectItem>
+                  {RIR_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
 
             {/* Rest Time */}
             <div className="space-y-1.5">
-              <Label htmlFor="rest-time" className="text-xs">Rest (sec)</Label>
+              <Label htmlFor="rest-time" className="text-xs">
+                Rest (sec)
+              </Label>
               <Select
                 value={currentExercise.restSeconds?.toString() ?? "60"}
-                onValueChange={(value) => handleInputChange('restSeconds', Number.parseInt(value))}
+                onValueChange={(value) =>
+                  handleInputChange("restSeconds", Number.parseInt(value))
+                }
               >
-                <SelectTrigger id="rest-time" className="border-[#333333] bg-[#1A1A1A] h-9 text-sm">
+                <SelectTrigger
+                  id="rest-time"
+                  // FIX: Use text-base on mobile to prevent zoom
+                  className="border-[#333333] bg-[#1A1A1A] h-9 text-base md:text-sm"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-[#333333] bg-[#111111] text-white">
-                  {[30, 45, 60, 75, 90, 120, 150, 180, 240].map(num => (
-                    <SelectItem key={num} value={num.toString()}>{num}s</SelectItem>
+                  {REST_OPTIONS.map((num) => (
+                    <SelectItem key={num} value={num.toString()}>
+                      {num}s
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -450,27 +531,40 @@ function ExerciseForm({
 
             {/* Weight (Optional) */}
             <div className="space-y-1.5">
-              <Label htmlFor="weight" className="text-xs">Target Wt (kg) (Optional)</Label>
+              <Label htmlFor="weight" className="text-xs">
+                Target Wt (kg) (Optional)
+              </Label>
               <Input
                 id="weight"
                 type="number"
                 step="0.5"
                 placeholder="e.g., 50.5"
                 value={currentExercise.weight ?? ""}
-                onChange={(e) => handleInputChange('weight', e.target.value ? parseFloat(e.target.value) : undefined)}
-                className="border-[#333333] bg-[#1A1A1A] h-9 text-sm"
+                onChange={(e) =>
+                  handleInputChange(
+                    "weight",
+                    e.target.value ? parseFloat(e.target.value) : undefined,
+                  )
+                }
+                // FIX: Use text-base on mobile to prevent zoom
+                // FIX: Add inputMode for better mobile keyboard
+                className="border-[#333333] bg-[#1A1A1A] h-9 text-base md:text-sm"
+                inputMode="decimal"
               />
             </div>
 
             {/* Notes (Optional) */}
             <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="notes" className="text-xs">Notes (Optional)</Label>
+              <Label htmlFor="notes" className="text-xs">
+                Notes (Optional)
+              </Label>
               <Input
                 id="notes"
                 placeholder="e.g., Focus on form, Use slow eccentric"
                 value={currentExercise.notes ?? ""}
-                onChange={(e) => handleInputChange('notes', e.target.value)}
-                className="border-[#333333] bg-[#1A1A1A] h-9 text-sm"
+                onChange={(e) => handleInputChange("notes", e.target.value)}
+                // FIX: Use text-base on mobile to prevent zoom
+                className="border-[#333333] bg-[#1A1A1A] h-9 text-base md:text-sm"
               />
             </div>
           </div>
