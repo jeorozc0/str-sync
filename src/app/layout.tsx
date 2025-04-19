@@ -2,6 +2,8 @@ import type React from "react"
 import "@/styles/globals.css";
 import { ThemeProvider } from "@/components/theme-provider"
 import { Toaster } from "@/components/ui/sonner";
+import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/react"
 
 export const metadata = {
   title: "StrengthSync",
@@ -27,6 +29,8 @@ export default function RootLayout({
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           {children}
           <Toaster richColors theme="dark" />
+          <SpeedInsights />
+          <Analytics />
         </ThemeProvider>
       </body>
     </html>
