@@ -3,25 +3,30 @@ import { type Prisma } from "@prisma/client";
 import { unstable_noStore as noStore } from "next/cache";
 import { db } from "../db";
 
-// --- Types ---
+// Type definition for the return value (good practice)
+export type RecentWorkoutLog = {
+  id: string;
+  completedAt: Date | null;
+  duration: number | null;
+  workout: {
+    id: string;
+    name: string;
+  } | null; // Workout could potentially be null if relation constraint allows
+};
+export type RecentWorkoutLogsResult = {
+  logs: RecentWorkoutLog[];
+  error?: string;
+};
 
-// Type for the data returned by getRecentWorkoutLogs
-export type RecentWorkoutLogData = Prisma.PromiseReturnType<
-  typeof getRecentWorkoutLogs
->["logs"];
+export async function getRecentWorkoutLogs(
+  userId: string,
+): Promise<RecentWorkoutLogsResult> {
+  noStore(); // Keep for dynamic data, or consider time-based revalidation
 
-// Type for the data returned by getWorkoutStats
-export type WorkoutStatsData = Prisma.PromiseReturnType<
-  typeof getWorkoutStats
->["stats"];
+  if (!userId) {
+    return { logs: [], error: "User ID is required." };
+  }
 
-// --- Query Functions ---
-
-/**
- * Fetches the 3 most recently completed workout logs for a user.
- */
-export async function getRecentWorkoutLogs(userId: string) {
-  noStore(); // Opt out of caching for dynamic data
   try {
     const logs = await db.workoutLog.findMany({
       where: {
@@ -29,7 +34,7 @@ export async function getRecentWorkoutLogs(userId: string) {
         completedAt: { not: null }, // Only fetch completed logs
       },
       orderBy: {
-        completedAt: "desc", // Order by most recent completion
+        completedAt: "desc", // Index on [userId, completedAt] makes this efficient
       },
       take: 3, // Limit to 3 recent logs
       select: {
@@ -37,185 +42,208 @@ export async function getRecentWorkoutLogs(userId: string) {
         completedAt: true,
         duration: true,
         workout: {
-          // Include the related workout's name
+          // Include the related workout's name and ID
           select: {
+            id: true, // Needed for the "Repeat" button link
             name: true,
-            id: true,
           },
         },
       },
     });
-    return { logs };
+
+    // Ensure the returned type matches RecentWorkoutLog[]
+    // Prisma's select should guarantee this structure if workout relation exists
+    return { logs: logs as RecentWorkoutLog[] };
   } catch (error) {
     console.error("Error fetching recent workout logs:", error);
     return { logs: [], error: "Failed to fetch recent workouts." };
   }
 }
 
-/**
- * Calculates various workout statistics for the user.
- */
-export async function getWorkoutStats(userId: string) {
-  noStore(); // Opt out of caching for dynamic data
+export type WorkoutStatsData = {
+  stats: {
+    streak: number;
+    workoutsThisMonth: number;
+    workoutsLastMonth: number;
+    recentPR: {
+      exerciseName: string;
+      weight: number;
+      reps: number;
+      completedAt: Date; // Add date of PR
+    } | null;
+  } | null;
+  error?: string;
+};
+
+export async function getWorkoutStats(
+  userId: string,
+): Promise<WorkoutStatsData> {
+  noStore();
+
+  if (!userId) {
+    return { stats: null, error: "User ID is required." };
+  }
+
   try {
     const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(now.getDate() - 30);
+    const streakLookbackDays = 35;
+    const prLookbackDays = 90;
 
-    // --- Workouts This Month & Last Month ---
-    const [workoutsThisMonth, workoutsLastMonth] = await Promise.all([
-      db.workoutLog.count({
+    const streakStartDate = new Date(startOfToday);
+    streakStartDate.setDate(startOfToday.getDate() - streakLookbackDays);
+
+    const prStartDate = new Date(startOfToday);
+    prStartDate.setDate(startOfToday.getDate() - prLookbackDays);
+
+    // --- Fetch data concurrently ---
+    const [
+      recentLogDatesForStreak,
+      prDataResult,
+      workoutsThisMonth,
+      workoutsLastMonth,
+    ] = await Promise.all([
+      // Promise 0: Get completion dates for streak calculation
+      db.workoutLog.findMany({
         where: {
           userId: userId,
-          completedAt: {
-            gte: startOfMonth, // Greater than or equal to the start of the current month
+          completedAt: { gte: streakStartDate },
+        },
+        select: { completedAt: true }, // completedAt can be null in schema, but filtered by gte
+        orderBy: { completedAt: "desc" },
+      }),
+
+      // Promise 1: Find the best ExerciseSet for PR
+      db.exerciseSet.findFirst({
+        where: {
+          weight: { gt: 0 },
+          reps: { gt: 0 },
+          exerciseLogEntry: {
+            workoutLog: {
+              userId: userId,
+              completedAt: { gte: prStartDate },
+            },
+          },
+        },
+        orderBy: [
+          { weight: 'desc' },
+          { reps: 'desc' },
+          { exerciseLogEntry: { workoutLog: { completedAt: 'desc' } } },
+        ],
+        select: {
+          weight: true,
+          reps: true,
+          exerciseLogEntry: {
+            select: {
+              workoutLog: { select: { completedAt: true } },
+              workoutExercise: { select: { exercise: { select: { name: true } } } },
+            },
           },
         },
       }),
+
+      // Promise 2: Count workouts this month
       db.workoutLog.count({
         where: {
           userId: userId,
-          completedAt: {
-            gte: startOfLastMonth, // Greater than or equal to the start of last month
-            lt: startOfMonth, // Less than the start of the current month
-          },
+          completedAt: { gte: startOfMonth },
+        },
+      }),
+
+      // Promise 3: Count workouts last month
+      db.workoutLog.count({
+        where: {
+          userId: userId,
+          completedAt: { gte: startOfLastMonth, lt: startOfMonth },
         },
       }),
     ]);
 
-    // --- Workout Streak ---
-    // Fetch distinct completion dates in the last ~month (adjust take as needed)
-    const recentLogDates = await db.workoutLog.findMany({
-      where: {
-        userId: userId,
-        completedAt: { not: null },
-      },
-      select: {
-        completedAt: true,
-      },
-      orderBy: {
-        completedAt: "desc",
-      },
-      take: 35, // Fetch enough logs to likely cover a streak
-    });
+    // --- Process Results ---
 
-    // Calculate streak (simple version: consecutive days)
+    // Streak Calculation
     let streak = 0;
-    if (recentLogDates.length > 0) {
-      const uniqueDates = [
-        ...new Set(
-          recentLogDates.map((log) =>
-            log.completedAt!.toISOString().split("T")[0],
-          ),
-        ),
-      ].map((dateStr) => new Date(dateStr)); // Get unique dates (YYYY-MM-DD)
+    if (recentLogDatesForStreak.length > 0) {
+      // FIX 1: Safely get date strings and filter out potential undefined/nulls
+      const dateStrings = recentLogDatesForStreak
+        .map((log) => log.completedAt?.toISOString().split("T")[0]) // Use optional chaining
+        .filter((dateStr): dateStr is string => typeof dateStr === 'string'); // Type guard filter
 
-      uniqueDates.sort((a, b) => b.getTime() - a.getTime()); // Sort descending
+      const uniqueDateStrings = [...new Set(dateStrings)];
 
-      const today = new Date(now.toISOString().split("T")[0]);
+      // Create Date objects only from valid strings and sort
+      const uniqueDates = uniqueDateStrings
+        .map((dateStr) => new Date(dateStr)) // Now dateStr is guaranteed string
+        .sort((a, b) => b.getTime() - a.getTime());
+
+      const today = startOfToday;
       const yesterday = new Date(today);
       yesterday.setDate(today.getDate() - 1);
 
-      // Check if the most recent log was today or yesterday to start the streak count
-      if (
+      if (uniqueDates.length > 0 && ( // Check uniqueDates has elements after filtering
         uniqueDates[0]?.getTime() === today.getTime() ||
         uniqueDates[0]?.getTime() === yesterday.getTime()
+      )
       ) {
         streak = 1;
         for (let i = 0; i < uniqueDates.length - 1; i++) {
           const currentDay = uniqueDates[i];
           const previousDay = uniqueDates[i + 1];
-          const diffTime = currentDay.getTime() - previousDay.getTime();
-          const diffDays = diffTime / (1000 * 60 * 60 * 24);
 
-          if (diffDays === 1) {
-            streak++;
+          // FIX 2: Add guard for currentDay and previousDay
+          if (currentDay && previousDay) {
+            const diffTime = currentDay.getTime() - previousDay.getTime();
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+            if (diffDays === 1) {
+              streak++;
+            } else {
+              break; // Streak broken
+            }
           } else {
-            break; // Streak broken
+            // Should not happen based on loop condition, but satisfies TS
+            break;
           }
         }
-        // If the most recent log was yesterday, but today has no log yet, the streak still counts
-        if (
-          uniqueDates[0]?.getTime() === yesterday.getTime() &&
-          !uniqueDates.find((d) => d.getTime() === today.getTime())
-        ) {
-          // Streak calculated above is correct
-        } else if (uniqueDates[0]?.getTime() !== today.getTime()) {
-          // If the most recent wasn't today or yesterday, streak is 0
+        // Reset check remains the same logic, but relies on the initial check above
+        if (uniqueDates[0]?.getTime() !== today.getTime() && uniqueDates[0]?.getTime() !== yesterday.getTime()) {
           streak = 0;
         }
       }
     }
 
-    // --- Recent PR (Example: Highest Weight Bench Press in last 30 days) ---
-    // NOTE: This is a simplified PR example. Real PR tracking can be more complex.
-    // You might want to store PRs separately or have a more robust query.
-    const recentPR = await db.exerciseSet.findFirst({
-      where: {
-        weight: { not: null }, // Must have a weight logged
-        exerciseLogEntry: {
-          workoutLog: {
-            userId: userId,
-            completedAt: { gte: thirtyDaysAgo }, // Within the last 30 days
-          },
-          // You might need to adjust this based on how you identify exercises
-          // This assumes an Exercise model linked via WorkoutExercise
-          workoutExercise: {
-            exercise: {
-              // Case-insensitive search for common variations
-              name: { contains: "Bench Press", mode: "insensitive" },
-            },
-          },
-        },
-      },
-      orderBy: {
-        weight: "desc", // Order by highest weight
-      },
-      select: {
-        weight: true,
-        reps: true,
-        exerciseLogEntry: {
-          select: {
-            workoutExercise: {
-              select: {
-                exercise: {
-                  select: { name: true }, // Get the actual exercise name
-                },
-              },
-            },
-          },
-        },
-      },
-    });
+    // PR Processing
+    let formattedPR = null;
+    // FIX 3: Use optional chaining for nested properties
+    if (prDataResult?.weight && prDataResult?.reps) { // Check direct properties first
+      const completedAt = prDataResult.exerciseLogEntry?.workoutLog?.completedAt;
+      const exerciseName = prDataResult.exerciseLogEntry?.workoutExercise?.exercise?.name;
+
+      // Check the results of optional chaining *before* using them
+      if (completedAt && exerciseName) {
+        formattedPR = {
+          exerciseName: exerciseName,
+          weight: prDataResult.weight, // Known to be non-null from outer check
+          reps: prDataResult.reps,     // Known to be non-null from outer check
+          completedAt: completedAt,    // Known to be Date from inner check
+        };
+      }
+    }
+
 
     return {
       stats: {
         streak,
         workoutsThisMonth,
         workoutsLastMonth,
-        recentPR: recentPR
-          ? {
-            exerciseName:
-              recentPR.exerciseLogEntry.workoutExercise.exercise.name,
-            weight: recentPR.weight,
-            reps: recentPR.reps,
-          }
-          : null,
+        recentPR: formattedPR,
       },
     };
   } catch (error) {
     console.error("Error fetching workout stats:", error);
-    return {
-      stats: {
-        streak: 0,
-        workoutsThisMonth: 0,
-        workoutsLastMonth: 0,
-        recentPR: null,
-      },
-      error: "Failed to fetch workout stats.",
-    };
+    return { stats: null, error: "Failed to fetch workout stats." };
   }
 }
 
