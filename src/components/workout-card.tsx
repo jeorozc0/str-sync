@@ -28,7 +28,6 @@ import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { type WorkoutCardData } from "@/server/queries/folders";
-import { startWorkoutFromTemplate } from "@/actions/logging";
 import { deleteWorkoutAction } from "@/actions/workouts";
 
 interface WorkoutCardsProps {
@@ -86,31 +85,54 @@ export default function WorkoutCards({ workouts }: WorkoutCardsProps) {
     router.push(`/w/${workoutId}/edit`);
   };
 
-  const handleStartWorkout = async (
-    event: React.MouseEvent | Event,
-    workoutId: string
+  const handleStartWorkout = (
+    workoutId: string,
+    // Refine type: Expect a React MouseEvent specifically, make it optional
+    event?: React.MouseEvent<HTMLElement> // Use HTMLElement or a more specific element like HTMLButtonElement
   ) => {
-    event.preventDefault();
-    event.stopPropagation();
-    if (startingWorkoutId) return;
+
+    // Check if event exists and has the necessary methods before calling them
+    if (event && typeof event.preventDefault === 'function') {
+      event.preventDefault();
+    }
+    if (event && typeof event.stopPropagation === 'function') {
+      event.stopPropagation();
+    }
+
+    // Prevent starting multiple workouts simultaneously
+    if (startingWorkoutId) {
+      console.log("Start workout already in progress for:", startingWorkoutId);
+      return;
+    }
+
+    // Set loading state for this specific workout ID
     setStartingWorkoutId(workoutId);
-    const toastId = toast.loading("Starting workout session...");
+
+    // Show immediate feedback
+    const toastId = toast.loading("Preparing workout session...");
+
     try {
-      const result = await startWorkoutFromTemplate(workoutId);
+      // Construct the URL for the live logging page
+      const targetPath = `/logs/live/${workoutId}`;
+      console.log(`Navigating to start workout: ${targetPath}`);
+
+      // Dismiss loading toast *before* navigation starts
       toast.dismiss(toastId);
-      if (result.success && result.workoutLogId) {
-        toast.success("Workout started!");
-        router.push(`/logs/live/${result.workoutLogId}`);
-      } else {
-        toast.error(result.error ?? "Failed to start workout.");
-        setStartingWorkoutId(null);
-      }
+
+      // Navigate
+      router.push(targetPath);
+
     } catch (error) {
+      // Catch potential errors during navigation setup
       toast.dismiss(toastId);
-      console.error("Error starting workout:", error);
-      toast.error("An unexpected error occurred while starting the workout.");
+      console.error("Error navigating to start workout:", error);
+      toast.error("Could not load the workout session page.");
+      // Reset loading state on error
       setStartingWorkoutId(null);
     }
+    // Consider resetting startingWorkoutId in a finally block or on component unmount
+    // if navigation failure needs specific handling. For now, we assume navigation succeeds
+    // or the component unmounts.
   };
 
   return (
@@ -120,8 +142,8 @@ export default function WorkoutCards({ workouts }: WorkoutCardsProps) {
           <Link href={`/w/${workout.id}`} key={workout.id} passHref>
             <Card
               className={cn(
-                "h-full cursor-pointer transition-all duration-200",
-                hoveringCard === workout.id ? "shadow-md translate-y-[-2px]" : "shadow-sm"
+                "h-full cursor-pointer",
+                hoveringCard === workout.id ? "shadow-md" : "shadow-sm"
               )}
               onMouseEnter={() => setHoveringCard(workout.id)}
               onMouseLeave={() => setHoveringCard(null)}
@@ -179,7 +201,7 @@ export default function WorkoutCards({ workouts }: WorkoutCardsProps) {
               </CardContent>
               <CardFooter className="pt-2">
                 <Button
-                  onClick={(e) => handleStartWorkout(e, workout.id)}
+                  onClick={(e) => handleStartWorkout(workout.id, e)}
                   disabled={startingWorkoutId === workout.id}
                   className="w-full bg-black hover:bg-neutral-800 text-white"
                   size="lg"
