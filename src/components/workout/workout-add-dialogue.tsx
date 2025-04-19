@@ -20,7 +20,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea } from "@/components/ui/scroll-area"; // Keep for Desktop Dialog
 import { Badge } from "@/components/ui/badge";
 import { Check, Search, ChevronDown, ChevronUp } from "lucide-react";
 import {
@@ -103,6 +103,8 @@ interface ExerciseFormProps {
   handleSelectExercise: (dbExercise: PrismaExercise) => void;
   isLoadingExercises: boolean;
   fetchError: string | null;
+  // Optional className prop if padding needs to be applied directly to the form root
+  className?: string;
 }
 
 export default function ExerciseDialog({
@@ -160,11 +162,12 @@ export default function ExerciseDialog({
     onSave(currentExercise);
   }, [currentExercise, onSave]);
 
-  // FIX: Memoize filtered exercises to avoid recalculation on every render
+  // Memoize filtered exercises
   const filteredAvailableExercises = useMemo(() => {
     return filterExercises(availableExercises, exerciseSearchQuery);
   }, [availableExercises, exerciseSearchQuery]);
 
+  // --- Desktop Dialog ---
   if (isDesktop) {
     return (
       <Dialog open={open} onOpenChange={onClose}>
@@ -175,7 +178,7 @@ export default function ExerciseDialog({
             </DialogTitle>
           </DialogHeader>
 
-          {/* Use ScrollArea for consistent scrollbar styling if needed, or keep div */}
+          {/* Desktop still uses ScrollArea or div for max-height */}
           <div className="max-h-[70vh] overflow-y-auto py-4 pr-2 pl-1 custom-scrollbar">
             <ExerciseForm
               currentExercise={currentExercise}
@@ -212,21 +215,19 @@ export default function ExerciseDialog({
     );
   }
 
-  // Render Drawer for mobile
+  // --- Mobile Drawer ---
   return (
     <Drawer open={open} onOpenChange={onClose}>
       <DrawerContent className="bg-[#111111] text-white">
-        <DrawerHeader className="border-b border-[#333333] px-4">
+        {/* Header */}
+        <DrawerHeader className="border-b border-[#333333] px-4 text-left">
           <DrawerTitle>
             {isEditing ? `Edit: ${exercise?.exercise.name}` : "Add Exercise"}
           </DrawerTitle>
         </DrawerHeader>
 
-        {/* FIX: Use dvh for height and add overscroll-behavior */}
-        <div
-          className="px-4 py-4 overflow-y-auto max-h-[calc(100dvh-10rem)]" // Use dvh
-          style={{ overscrollBehavior: "contain" }} // Prevent body scroll
-        >
+        {/* Content Area: Let DrawerContent handle scroll, add padding wrapper */}
+        <div className="overflow-auto px-4 py-4">
           <ExerciseForm
             currentExercise={currentExercise}
             setCurrentExercise={setCurrentExercise}
@@ -241,7 +242,8 @@ export default function ExerciseDialog({
           />
         </div>
 
-        <DrawerFooter className="border-t border-[#333333] px-4 py-3">
+        {/* Footer */}
+        <DrawerFooter className="border-t border-[#333333] px-4 py-3 mt-auto">
           <div className="flex justify-between w-full">
             <DrawerClose asChild>
               <Button variant="outline" className="border-[#333333] text-sm h-9">
@@ -262,6 +264,7 @@ export default function ExerciseDialog({
   );
 }
 
+// --- Exercise Form Component (with fixes) ---
 function ExerciseForm({
   currentExercise,
   setCurrentExercise,
@@ -273,6 +276,7 @@ function ExerciseForm({
   handleSelectExercise,
   isLoadingExercises,
   fetchError,
+  className, // Accept className prop if needed
 }: ExerciseFormProps) {
   const handleInputChange = useCallback(
     <K extends keyof StoreWorkoutExercise>(
@@ -287,8 +291,10 @@ function ExerciseForm({
     [setCurrentExercise],
   );
 
+  // Note: Using Shadcn's ScrollArea *inside* the form for the exercise list
+  // This is generally fine as it's a contained scrolling area.
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 ${className}`}>
       {/* Exercise Selection Section */}
       <div className="space-y-3">
         {currentExercise.exerciseId && (
@@ -330,6 +336,7 @@ function ExerciseForm({
                 />
               </div>
 
+              {/* Use Shadcn ScrollArea for the list */}
               <ScrollArea className="h-[200px] rounded-md border border-[#333333] p-2">
                 {isLoadingExercises ? (
                   <div className="py-8 text-center text-gray-400">
