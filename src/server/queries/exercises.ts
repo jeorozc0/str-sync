@@ -1,6 +1,5 @@
 // src/server/queries/exercises.ts
 import { db } from "../db";
-import { unstable_cache } from 'next/cache'
 import { type Exercise } from "@prisma/client"; // Import Prisma type
 
 /**
@@ -9,10 +8,8 @@ import { type Exercise } from "@prisma/client"; // Import Prisma type
  *
  * @returns Promise that resolves to an array of Exercise objects
  */
-const getCachedExercises = unstable_cache(
-  // The function to cache - performs the actual DB query
+const getCachedExercises =   // The function to cache - performs the actual DB query
   async (): Promise<Exercise[]> => {
-    console.log("CACHE MISS: Fetching exercises from database..."); // Log cache misses
     try {
       const exercises = await db.exercise.findMany({
         orderBy: {
@@ -27,17 +24,8 @@ const getCachedExercises = unstable_cache(
       // Depending on requirements, you might return [] or re-throw
       return [];
     }
-  },
-  // Cache Key Parts: An array identifying this specific cache entry
-  ['all-exercises-list'],
-  // Cache Options:
-  {
-    // Revalidation Strategy: Choose one
-    revalidate: 3600, // Time-based: Revalidate cache every 3600 seconds (1 hour). Adjust as needed.
-    // Set to `false` to cache indefinitely until next build/deploy.
-    // tags: ['exercises'], // Tag-based: Allows on-demand revalidation using revalidateTag('exercises') elsewhere.
   }
-);
+
 
 // The function that will be imported and used by your Server Action
 export default async function fetchAllExercises(): Promise<Exercise[]> {
