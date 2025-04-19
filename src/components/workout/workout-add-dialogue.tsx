@@ -243,7 +243,7 @@ export default function ExerciseDialog({
         </div>
 
         {/* Footer */}
-        <DrawerFooter className="border-t border-[#333333] px-4 py-3 mt-auto">
+        <DrawerFooter className="border-t border-[#333333] px-4 py-3">
           <div className="flex justify-between w-full">
             <DrawerClose asChild>
               <Button variant="outline" className="border-[#333333] text-sm h-9">
