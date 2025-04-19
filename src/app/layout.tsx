@@ -16,6 +16,13 @@ export default function RootLayout({
 
   return (
     <html lang="en" className="dark" suppressHydrationWarning>
+      <head>
+        {/* Prevent auto-zoom on input focus in mobile browsers */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+        />
+      </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="dark" enableSystem={false}>
           {children}
